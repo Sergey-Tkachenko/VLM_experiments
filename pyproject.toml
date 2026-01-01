@@ -1,0 +1,39 @@
+[project]
+name = "vlm-experiments"
+version = "0.1.0"
+description = "VLM experiments for dashcam analysis"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "decord>=0.6.0",
+    "einops>=0.7.0",
+    "huggingface_hub>=0.24.6",
+    "numpy>=1.26.0",
+    "pillow>=10.0.0",
+    "safetensors>=0.4.4",
+    "tqdm>=4.66.0",
+    "transformers>=4.45.2",
+]
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.384",
+    "pytest>=8.3.2",
+    "ruff>=0.6.2",
+]
+
+[tool.pytest.ini_options]
+addopts = "-v"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.pyright]
+pythonVersion = "3.10"
+typeCheckingMode = "basic"
+reportMissingTypeStubs = false
