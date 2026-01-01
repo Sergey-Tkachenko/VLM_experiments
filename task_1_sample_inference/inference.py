@@ -1,0 +1,225 @@
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Literal
+
+import numpy as np
+import torch
+from decord import VideoReader, cpu
+from loguru import logger
+from pydantic import BaseModel, Field, ValidationError
+from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
+
+
+PROMPT_TEMPLATE = (
+    "Analyze the dashcam video.\n"
+    "Return ONLY valid JSON that matches this JSON Schema:\n"
+    "{schema_json}\n"
+    "Field descriptions:\n"
+    "{field_descriptions}\n"
+    "No markdown, no extra keys, no trailing text."
+)
+
+
+class DashcamSchema(BaseModel):
+    """Schema for dashcam analysis outputs."""
+
+    unique_pedestrian_count: int = Field(
+        ...,
+        description="Count of unique pedestrians visible in the clip. Use 0 if none are present.",
+        ge=0,
+    )
+    adjacent_car_description: str = Field(
+        ...,
+        description="Short description of the car adjacent to the ego vehicle (color, type, position).",
+        min_length=1,
+    )
+
+
+@dataclass(frozen=True)
+class VideoSample:
+    """Container for sampled video frames and realized FPS."""
+
+    frames: np.ndarray
+    effective_fps: float
+
+
+def _compute_stride(source_fps: float, target_fps: float) -> int:
+    if target_fps <= 0:
+        raise ValueError("target_fps must be positive.")
+    if source_fps <= 0:
+        raise ValueError("source_fps must be positive.")
+    return max(1, int(round(source_fps / target_fps)))
+
+
+def _ensure_even_frames(frames: np.ndarray) -> np.ndarray:
+    if frames.shape[0] % 2 == 1 and frames.shape[0] > 1:
+        return frames[:-1]
+    return frames
+
+
+def _extract_json_candidate(text: str) -> str:
+    cleaned = text.strip()
+    if "```" in cleaned:
+        cleaned = "\n".join(line for line in cleaned.splitlines() if "```" not in line).strip()
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        return cleaned[start : end + 1]
+    return cleaned
+
+
+def load_video(
+    path: str,
+    fps: float,
+    sampler: Literal["uniform", "windowed"] = "uniform",
+    start_sec: float | None = None,
+    window_sec: float | None = None,
+) -> VideoSample:
+    """Load and sample a video using Decord.
+
+    Args:
+        path: Path to the video file.
+        fps: Target sampling FPS.
+        sampler: "uniform" or "windowed".
+        start_sec: Window start in seconds for windowed sampling.
+        window_sec: Window length in seconds for windowed sampling.
+
+    Returns:
+        VideoSample containing sampled frames and effective FPS.
+    """
+    video_path = Path(path)
+    if not video_path.exists():
+        raise FileNotFoundError(f"Video not found: {video_path}")
+
+    reader = VideoReader(str(video_path), ctx=cpu(0))
+    source_fps = float(reader.get_avg_fps())
+    stride = _compute_stride(source_fps, fps)
+    total_frames = len(reader)
+
+    if sampler == "uniform":
+        indices = np.arange(0, total_frames, stride)
+    else:
+        if start_sec is None or window_sec is None:
+            raise ValueError("start_sec and window_sec are required for windowed sampling.")
+        start_idx = int(start_sec * source_fps)
+        end_idx = int((start_sec + window_sec) * source_fps)
+        end_idx = min(end_idx, total_frames)
+        if start_idx >= end_idx:
+            raise ValueError("Windowed sampling range is empty. Check start_sec/window_sec.")
+        indices = np.arange(start_idx, end_idx, stride)
+
+    if indices.size == 0:
+        raise ValueError("No frames selected. Adjust fps or window parameters.")
+
+    try:
+        frames = reader.get_batch(indices).asnumpy()
+    except Exception:
+        frames = np.stack([reader[int(idx)].asnumpy() for idx in indices])
+    frames = _ensure_even_frames(frames)
+    effective_fps = source_fps / stride
+    return VideoSample(frames=frames, effective_fps=effective_fps)
+
+
+def _format_field_descriptions(schema_model: type[BaseModel]) -> str:
+    schema = schema_model.model_json_schema()
+    properties = schema.get("properties", {})
+    lines = []
+    for name, meta in properties.items():
+        field_type = meta.get("type", "unknown")
+        desc = meta.get("description", "").strip()
+        if desc:
+            lines.append(f"- {name} ({field_type}): {desc}")
+        else:
+            lines.append(f"- {name} ({field_type})")
+    return "\n".join(lines)
+
+
+def build_prompt(schema_json: str, schema_model: type[BaseModel]) -> str:
+    """Create a strict JSON-only prompt with schema guidance."""
+    return PROMPT_TEMPLATE.format(
+        schema_json=schema_json,
+        field_descriptions=_format_field_descriptions(schema_model),
+    )
+
+
+def parse_to_json(text: str, schema_model: type[BaseModel]) -> dict[str, Any]:
+    """Parse and validate JSON output using a Pydantic schema."""
+    try:
+        data = json.loads(_extract_json_candidate(text))
+    except json.JSONDecodeError as exc:
+        raise ValueError("Model output is not valid JSON.") from exc
+
+    try:
+        return schema_model.model_validate(data).model_dump()
+    except ValidationError as exc:
+        raise ValueError("Model output failed schema validation.") from exc
+
+
+class QwenVideoInferencer:
+    """Inference helper for Qwen2.5-VL with schema-validated outputs."""
+
+    def __init__(
+        self,
+        model_id: str,
+        device: str = "cuda",
+        dtype: torch.dtype = torch.bfloat16,
+        model: Qwen2_5_VLForConditionalGeneration | None = None,
+        processor: AutoProcessor | None = None,
+    ) -> None:
+        self.model = model or Qwen2_5_VLForConditionalGeneration.from_pretrained(model_id, torch_dtype=dtype)
+        if model is None:
+            self.model.to(device)
+        self.processor = processor or AutoProcessor.from_pretrained(model_id)
+
+    def run_inference(self, frames: np.ndarray, prompt: str, max_new_tokens: int = 256) -> str:
+        conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "video"},
+                    {"type": "text", "text": prompt},
+                ],
+            }
+        ]
+        prompt_text = self.processor.apply_chat_template(
+            conversation,
+            add_generation_prompt=True,
+            tokenize=False,
+        )
+        inputs = self.processor(
+            text=[prompt_text],
+            videos=[frames],
+            return_tensors="pt",
+        ).to(self.model.device)
+        generated = self.model.generate(**inputs, max_new_tokens=max_new_tokens)
+        trimmed = [out[len(inp) :] for inp, out in zip(inputs.input_ids, generated)]
+        return self.processor.batch_decode(
+            trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=True
+        )[0]
+
+    def infer(
+        self,
+        frames: np.ndarray,
+        schema_model: type[BaseModel],
+        max_retries: int = 1,
+        max_new_tokens: int = 256,
+    ) -> dict[str, Any]:
+        schema_json = json.dumps(schema_model.model_json_schema(), ensure_ascii=False)
+        attempts = max_retries + 1
+        last_error: Exception | None = None
+        for attempt in range(1, attempts + 1):
+            prompt = build_prompt(schema_json, schema_model)
+            if attempt > 1:
+                prompt += "\nYour previous response was invalid JSON. Respond with JSON only."
+            raw_text = self.run_inference(frames, prompt, max_new_tokens=max_new_tokens)
+            try:
+                return parse_to_json(raw_text, schema_model)
+            except ValueError as exc:
+                last_error = exc
+                logger.warning("Parsing failed on attempt {}: {}", attempt, exc)
+        if last_error:
+            raise last_error
+        raise RuntimeError("Inference failed without producing output.")

@@ -25,6 +25,8 @@ The repo uses:
 - `uv` for managing dependencies, with separate group for dev dependencies;
 - `pytest` for testing
 - `huggingface` is used to load model and pretrained weights in the first place.
+- `python-dotenv` -- ALWAYS load .env in the root of the repo to obtain necessary env vars, including HF cache locations to avoid unnecessary downloads.
+- `loguru` for logging;
 
 # Running the code
 
