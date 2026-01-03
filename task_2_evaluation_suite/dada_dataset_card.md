@@ -1,0 +1,174 @@
+# DADA-2000 — Dataset card (computed from XLSX annotations)
+
+> Generated from `dada_text_annotations.xlsx` (sheets `Sheet1` + `text`).
+
+## 0. Purpose
+
+DADA-2000 is a dashcam accident dataset intended for **accident understanding/anticipation** and **driver attention modeling**. It provides accident categories, temporal accident windows, crash-object localization (in the full dataset), and driver-attention signals. This card focuses on what’s present in the provided XLSX annotations.
+
+**References**
+
+- Paper (original benchmark): https://arxiv.org/abs/1904.12634
+
+- GitHub / download page (LOTVS-DADA): https://github.com/JWFangit/LOTVS-DADA
+
+## 1. What’s in the annotation file
+
+- `Sheet1`: per-sample metadata (weather/light/scene/road), event `type`, accident flag, and frame markers (`abnormal start`, `accident frame`, `abnormal end`) + text fields (`texts`, `causes`, `measures`).
+- `text`: a small dictionary of text templates grouped by an ID (38 groups in this file).
+
+## 2. General stats
+
+- **Samples in this XLSX (`Sheet1` rows):** 1,962
+- **Unique `video` IDs in this XLSX:** 255 *(note: `video` repeats; treat each row as one annotated sample)*
+- **Accident present:** 1,945 / 1,962 (99.13%)
+- **No-accident samples:** 17 / 1,962 (0.87%)
+- **Total frames (sum of `total frames` across samples):** 649,399
+
+**Dataset release notes (not computable from XLSX):**
+
+- **Video resolution:** commonly reported as **1584×660**
+
+- **FPS:** commonly evaluated at **30 fps**
+
+- **Compressed size:** GitHub release note mentions ~53 GB for a train/test release (and ~116 GB for a “full benchmark”).
+
+### Clip length (`total frames`)
+
+- **All samples** (frames): mean 330.99, median 322, p05 160, p25 240.25, p75 414.75, p95 519.90 (≈ seconds @ 30fps: mean 11.03s, median 10.73s, p25 8.01s, p75 13.82s)
+
+- **Accident samples only** (frames): mean 331.08, median 322, p05 160, p25 240, p75 415, p95 520 (≈ seconds @ 30fps: mean 11.04s, median 10.73s, p25 8.00s, p75 13.83s)
+
+- **No-accident samples only** (frames): mean 321.06, median 340, p05 151.60, p25 280, p75 410, p95 432 (≈ seconds @ 30fps: mean 10.70s, median 11.33s, p25 9.33s, p75 13.67s)
+
+### Temporal structure (derived from frame markers)
+
+- **Pre-abnormal context (`t_ai`)** (frames): mean 133.28, median 115, p05 1, p25 50, p75 186, p95 330 (≈ seconds @ 30fps: mean 4.44s, median 3.83s, p25 1.67s, p75 6.20s)
+
+- **Abnormal window length (`t_ae - t_ai`)** (frames): mean 96.91, median 90, p05 54, p25 75, p75 112, p95 158 (≈ seconds @ 30fps: mean 3.23s, median 3.00s, p25 2.50s, p75 3.73s)
+
+- **Time-to-collision inside abnormal window (`t_co - t_ai`, accident only)** (frames): mean 49.28, median 45, p05 21, p25 34, p75 60, p95 90 (≈ seconds @ 30fps: mean 1.64s, median 1.50s, p25 1.13s, p75 2.00s)
+
+- **Post-collision part inside abnormal window (`t_ae - t_co`, accident only)** (frames): mean 47.64, median 42, p05 22, p25 33, p75 56, p95 92 (≈ seconds @ 30fps: mean 1.59s, median 1.40s, p25 1.10s, p75 1.87s)
+
+- **Tail after abnormal window (`end - t_ae`)** (frames): mean 100.80, median 85, p05 6, p25 46, p75 135, p95 250 (≈ seconds @ 30fps: mean 3.36s, median 2.83s, p25 1.53s, p75 4.50s)
+
+Additional ratios (computed):
+
+- Mean abnormal-window fraction of the clip: 0.324 (median 0.297)
+- Mean accident-frame position in the clip (accident samples): 0.536 (median 0.540)
+
+## 3. Metadata distributions
+
+### Weather
+
+| weather | count | share |
+| --- | --- | --- |
+| sunny | 1824 | 92.97% |
+| rainy | 129 | 6.57% |
+| snowy | 3 | 0.15% |
+| foggy | 6 | 0.31% |
+
+### Light
+
+| light | count | share |
+| --- | --- | --- |
+| day | 1771 | 90.27% |
+| night | 191 | 9.73% |
+
+### Scene
+
+| scene | count | share |
+| --- | --- | --- |
+| highway | 184 | 9.38% |
+| tunnel | 12 | 0.61% |
+| mountain | 55 | 2.80% |
+| urban | 1319 | 67.23% |
+| rural | 392 | 19.98% |
+
+### Road geometry (`linear`)
+
+| road_type | count | share |
+| --- | --- | --- |
+| arterials | 840 | 42.81% |
+| curve | 99 | 5.05% |
+| intersection | 610 | 31.09% |
+| T-junction | 391 | 19.93% |
+| ramp | 22 | 1.12% |
+
+## 4. GT categories (`type`) + accident rate
+
+- **# unique `type` IDs in this XLSX:** 52
+
+Per-type distribution with accident/non-accident breakdown:
+
+| type_id | total | accident | non_accident | accident_rate | share |
+| --- | --- | --- | --- | --- | --- |
+| 11 | 252 | 249 | 3 | 98.81% | 12.84% |
+| 43 | 209 | 209 | 0 | 100.00% | 10.65% |
+| 50 | 201 | 201 | 0 | 100.00% | 10.24% |
+| 10 | 167 | 166 | 1 | 99.40% | 8.51% |
+| 5 | 157 | 157 | 0 | 100.00% | 8.00% |
+| 6 | 119 | 119 | 0 | 100.00% | 6.07% |
+| 37 | 85 | 84 | 1 | 98.82% | 4.33% |
+| 48 | 82 | 82 | 0 | 100.00% | 4.18% |
+| 38 | 67 | 67 | 0 | 100.00% | 3.41% |
+| 8 | 57 | 53 | 4 | 92.98% | 2.91% |
+| 1 | 53 | 48 | 5 | 90.57% | 2.70% |
+| 57 | 45 | 45 | 0 | 100.00% | 2.29% |
+| 12 | 42 | 42 | 0 | 100.00% | 2.14% |
+| 49 | 40 | 39 | 1 | 97.50% | 2.04% |
+| 56 | 37 | 37 | 0 | 100.00% | 1.89% |
+| 14 | 31 | 31 | 0 | 100.00% | 1.58% |
+| 39 | 30 | 30 | 0 | 100.00% | 1.53% |
+| 42 | 23 | 23 | 0 | 100.00% | 1.17% |
+| 9 | 20 | 20 | 0 | 100.00% | 1.02% |
+| 51 | 18 | 18 | 0 | 100.00% | 0.92% |
+| 41 | 18 | 18 | 0 | 100.00% | 0.92% |
+| 61 | 18 | 18 | 0 | 100.00% | 0.92% |
+| 3 | 17 | 17 | 0 | 100.00% | 0.87% |
+| 59 | 17 | 17 | 0 | 100.00% | 0.87% |
+| 24 | 17 | 17 | 0 | 100.00% | 0.87% |
+| 40 | 16 | 15 | 1 | 93.75% | 0.82% |
+| 4 | 13 | 13 | 0 | 100.00% | 0.66% |
+| 7 | 12 | 12 | 0 | 100.00% | 0.61% |
+| 21 | 12 | 12 | 0 | 100.00% | 0.61% |
+| 53 | 11 | 11 | 0 | 100.00% | 0.56% |
+| 52 | 11 | 11 | 0 | 100.00% | 0.56% |
+| 18 | 10 | 10 | 0 | 100.00% | 0.51% |
+| 45 | 9 | 9 | 0 | 100.00% | 0.46% |
+| 13 | 9 | 9 | 0 | 100.00% | 0.46% |
+| 2 | 6 | 6 | 0 | 100.00% | 0.31% |
+| 58 | 4 | 4 | 0 | 100.00% | 0.20% |
+| 55 | 3 | 3 | 0 | 100.00% | 0.15% |
+| 44 | 3 | 3 | 0 | 100.00% | 0.15% |
+| 54 | 3 | 2 | 1 | 66.67% | 0.15% |
+| 15 | 3 | 3 | 0 | 100.00% | 0.15% |
+| 60 | 3 | 3 | 0 | 100.00% | 0.15% |
+| 36 | 2 | 2 | 0 | 100.00% | 0.10% |
+| 23 | 1 | 1 | 0 | 100.00% | 0.05% |
+| 47 | 1 | 1 | 0 | 100.00% | 0.05% |
+| 16 | 1 | 1 | 0 | 100.00% | 0.05% |
+| 17 | 1 | 1 | 0 | 100.00% | 0.05% |
+| 19 | 1 | 1 | 0 | 100.00% | 0.05% |
+| 20 | 1 | 1 | 0 | 100.00% | 0.05% |
+| 22 | 1 | 1 | 0 | 100.00% | 0.05% |
+| 33 | 1 | 1 | 0 | 100.00% | 0.05% |
+| 30 | 1 | 1 | 0 | 100.00% | 0.05% |
+| 34 | 1 | 1 | 0 | 100.00% | 0.05% |
+
+## 5. Text fields / data quality notes
+
+- `texts` missing: 1 row(s); `measures` missing: 10 row(s).
+- Unique normalized `texts` strings (after `.strip()`): 96.
+- Many `texts` entries contain trailing spaces; strip them before grouping/deduplicating.
+
+## 6. Suggested VLM evaluation targets (aligned to this XLSX)
+
+- **Event type classification**: predict `type` as a categorical label (macro-F1 / per-class accuracy).
+- **Temporal grounding**: predict `{abnormal_start, accident_frame, abnormal_end}` (MAE in frames/seconds; optional IoU over abnormal window).
+- **Structured “safety report” generation**: output JSON with `{type, accident_happened, cause, measure, timings}` and track parsing success rate.
+
+## 7. License
+
+License is not clearly stated in the provided XLSX; verify the dataset’s usage constraints on the official release page.
