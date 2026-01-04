@@ -22,3 +22,7 @@ HF transformers have their own limitations, e.g. they lack structured output fea
 # Research QWEN configuration
 
 Qwen 2.5 VL has a lot of configs, which I did not touch in the task 1. They might offer space of optimization, that is, we need to investigate it further.
+
+# Expand qualititative analysis further
+
+20 -> 100, goal -- ensure noise level is acceptable (< 5%). Make sure you respect train/test/val split, regarding only train/val samples.
