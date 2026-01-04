@@ -208,37 +208,191 @@ Per-type distribution with accident/non-accident breakdown:
 
 ## 7. Qualitiative analysis
 
+### Summary
+
+I reviewed 1% of the dataset -- 20 samples. Annotation is mostly correct, with only 1 sample of 20 contained ambiguous annotation, + hitting/crossing concent is a bit unclear.
+
+2 of 20 has some artifacts in videos -- "leaps" and concatenated videos. Both does not expected to affect training, however, it is unclear how many of such "artifacts" are present on the vide.
+
+Further analysis may include more videos (~100) to ensure artifacts are rare.
+
+
 #### Most common types
 
 ### Type = 11
-
 #### 001
 
-#### 100
+Annotation reflects the video: weather is rainy, accident happended and falls into specified category.
+
+Detection abnormal frames is still unclear yet I guess it can be based on distance to object when hitting.
 
 #### 200
+
+Annotation: type is good, weather and day/night correct. However, I personally see the highway while annotation suggests rural (also acceptable).
+
+Abnormal frames: clear, accident frame can be detected cleanly.
 
 
 #### 12/040 (adjacent)
 
+Annotation: correct
+
+Abnormal frames: clear, accident frame can be detected cleanly.
+
 #### 10/050 (adjacent)
 
+Annotation: mostly correct, however, I am not sure about cause, because I can not see if the ego-car turned the signal lights or not. Also I am unsure that rules says about such manevour. However, it seems that it is the ego-driver who is responsible for this, so I mark it as OK.00s
+
+Abnormal frames: clear, accident frame can be detected cleanly.
 
 ### Type = 43
 
+This category is effectively car hitting another car.
+
+#### 43/001
+
+Annotation: type is good, weather and day/night correct.
+
+Abnormal frames: clear, accident frame can be detected cleanly.
+
+#### 43/011
+
+Tunnel/night setting, interesting
+
+Annotation: type is good, weather and day/night correct.
+
+Abnormal frames: clear, accident frame can be detected cleanly.
+
+#### 43/085
+
+Annotation: type is good, weather and day/night correct, ramp label seem also to be valid.
+
+Abnormal frames: cover almost full video, not sure about them.
+
 ### Type = 50
-
-### Type = 10
-
-### Type = 5
-
-
-### Type = 2
 
 #### 001
 
+Annotation: correct
+
+Abnormal frames: clear, accident frame can be detected cleanly.
+
+#### 070
+
+Annotation: correct
+
+Abnormal frames: clear, accident frame can be detected cleanly.
 
 
+#### 096
+
+Rural setting
+
+Annotation: correct
+
+Abnormal frames: clear, accident frame can be detected cleanly.
+
+
+### Type = 10
+
+#### 001
+
+Annotation: not sure about T junction. Also it is strange because car actually hits, why is it crossing instead of hitting -- unclear.
+
+Abnormal frames: human can see it cleanly, however, for VLM it will be hard -- it is clean only due to the ego-vehicle gets shaken.
+
+Also this is strange clip since it is actually two clips -- one with annotation and other with completely different settings.
+
+#### 015
+
+Annotation: correct
+
+Abnormal frames: clear, accident frame can be detected cleanly.
+
+Interestingly, everything happens in the parking.
+
+#### 130
+
+Annotation: completely unclear -- I was not able to understand if something is incorrect, it looked like sudden stop.
+
+Abnormal frames: hard to identify for very same reason.
+
+### Type = 5
+
+### 001
+
+Nigth setting
+
+Annotation: correct
+
+Abnormal frames: clear, accident frame can be detected cleanly.
+
+Interestinly, it seem some parts of the clip were "cut", i.e. there are visible "leaps" in video.
+
+
+### 002
+
+Day setting, rural
+
+Annotation: correct
+
+Abnormal frames: clear, accident frame can be detected cleanly.
+
+### 008
+
+Rainy weather
+
+Annotation: correct
+
+Abnormal frames: clear, accident frame can be detected cleanly.
+
+### Type 6
+
+#### 040
+
+Annotation: correct
+
+Abnormal frames: clear, accident frame can be detected cleanly.
+
+### Type 37
+
+#### 030
+
+Annotation: correct
+
+Abnormal frames: clear, accident frame can be detected cleanly.
+
+### Type 48
+
+#### 023
+
+Annotation: correct
+
+Abnormal frames: clear, accident frame can be detected cleanly.
+
+### Type 38
+
+#### 015
+
+Annotation: correct
+
+Abnormal frames: clear, accident frame can be detected cleanly.
+
+### Type 8
+
+#### 007
+
+Annotation: correct
+
+Abnormal frames: unclear, at which moment truck violated the rules.
+
+### Type = 1
+
+#### 003
+
+Annotation: correct
+
+Abnormal frames: unclear, at which moment truck violated the rules.
 
 ## 8. License
 
