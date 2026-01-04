@@ -205,6 +205,41 @@ Per-type distribution with accident/non-accident breakdown:
 - **Temporal grounding**: predict `{abnormal_start, accident_frame, abnormal_end}` (MAE in frames/seconds; optional IoU over abnormal window).
 - **Structured “safety report” generation**: output JSON with `{type, accident_happened, cause, measure, timings}` and track parsing success rate.
 
-## 7. License
+
+## 7. Qualitiative analysis
+
+#### Most common types
+
+### Type = 11
+
+#### 001
+
+#### 100
+
+#### 200
+
+
+#### 12/040 (adjacent)
+
+#### 10/050 (adjacent)
+
+
+### Type = 43
+
+### Type = 50
+
+### Type = 10
+
+### Type = 5
+
+
+### Type = 2
+
+#### 001
+
+
+
+
+## 8. License
 
 License is not clearly stated in the provided XLSX; verify the dataset’s usage constraints on the official release page.
