@@ -210,11 +210,11 @@ Per-type distribution with accident/non-accident breakdown:
 
 ### Summary
 
-I reviewed 1% of the dataset -- 20 samples. Annotation is mostly correct, with only 1 sample of 20 contained ambiguous annotation, + hitting/crossing concent is a bit unclear.
+I reviewed ~ 1% of the dataset -- 17 samples. Annotation is mostly correct, with only 1 sample of 17 contained ambiguous annotation, + hitting/crossing concent is a bit unclear.
 
 Accident frame usually can be reliable identified. However, it is not true for abnormal frames -- the exact rules about how they should be derived unclear, so I would not expect great MAE there.
 
-2 of 20 has some artifacts in videos -- "leaps" and concatenated videos. Both does not expected to affect training, however, it is unclear how many of such "artifacts" are present on the vide.
+2 of 17 has some artifacts in videos -- "leaps" and concatenated videos. Both does not expected to affect training, however, it is unclear how many of such "artifacts" are present on the vide.
 
 Further analysis may include more videos (~100) to ensure artifacts are rare.
 
@@ -234,12 +234,6 @@ Annotation: type is good, weather and day/night correct. However, I personally s
 
 Abnormal frames: clear, accident frame can be detected cleanly.
 
-
-#### 12/040 (adjacent)
-
-Annotation: correct
-
-Abnormal frames: clear, accident frame can be detected cleanly.
 
 #### 10/050 (adjacent)
 
@@ -265,21 +259,9 @@ Annotation: type is good, weather and day/night correct.
 
 Abnormal frames: clear, accident frame can be detected cleanly.
 
-#### 43/085
-
-Annotation: type is good, weather and day/night correct, ramp label seem also to be valid.
-
-Abnormal frames: cover almost full video, not sure about them.
-
 ### Type = 50
 
 #### 001
-
-Annotation: correct
-
-Abnormal frames: clear, accident frame can be detected cleanly.
-
-#### 070
 
 Annotation: correct
 
@@ -353,20 +335,11 @@ Abnormal frames: clear, accident frame can be detected cleanly.
 #### 040
 
 Annotation: correct
-
 Abnormal frames: clear, accident frame can be detected cleanly.
 
 ### Type 37
 
 #### 030
-
-Annotation: correct
-
-Abnormal frames: clear, accident frame can be detected cleanly.
-
-### Type 48
-
-#### 023
 
 Annotation: correct
 
