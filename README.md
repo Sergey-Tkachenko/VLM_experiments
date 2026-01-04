@@ -1,5 +1,11 @@
 # VLM_experiments
 
+## Citation
+
+If you use the DADA-2000 dataset, please cite:
+
+Fang, Jianwu, Dingxin Yan, Jiahuan Qiao, Jianru Xue, and Hongkai Yu. "DADA: Driver Attention Prediction in Driving Accident Scenarios." IEEE Transactions on Intelligent Transportation Systems 23, no. 6 (2022): 4959-4971.
+
 ## Setup
 
 This repo uses `uv` for dependency management. The RunPod image already includes PyTorch 2.4, so we avoid reinstalling it

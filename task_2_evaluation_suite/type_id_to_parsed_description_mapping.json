@@ -1,0 +1,86 @@
+{
+    "1":  { "ego_involved": true,  "participants": ["ego_car", "pedestrian"], "interaction": "crossing" },
+    "2":  { "ego_involved": true,  "participants": ["ego_car", "pedestrian"], "interaction": "hitting" },
+  
+    "3":  { "ego_involved": true,  "participants": ["ego_car", "cyclist"],    "interaction": "crossing" },
+    "4":  { "ego_involved": true,  "participants": ["ego_car", "cyclist"],    "interaction": "hitting" },
+  
+    "5":  { "ego_involved": true,  "participants": ["ego_car", "motorbike"],  "interaction": "crossing" },
+    "6":  { "ego_involved": true,  "participants": ["ego_car", "motorbike"],  "interaction": "hitting" },
+  
+    "7":  { "ego_involved": true,  "participants": ["ego_car", "truck"],      "interaction": "crossing" },
+    "8":  { "ego_involved": true,  "participants": ["ego_car", "truck"],      "interaction": "hitting" },
+    "9":  { "ego_involved": true,  "participants": ["ego_car", "truck"],      "interaction": "overtaking" },
+  
+    "10": { "ego_involved": true,  "participants": ["ego_car", "car"],        "interaction": "crossing" },
+    "11": { "ego_involved": true,  "participants": ["ego_car", "car"],        "interaction": "hitting" },
+    "12": { "ego_involved": true,  "participants": ["ego_car", "car"],        "interaction": "overtaking" },
+  
+    "13": { "ego_involved": true,  "participants": ["ego_car", "large_roadblocks"],            "interaction": "hitting" },
+    "14": { "ego_involved": true,  "participants": ["ego_car", "curb"],                         "interaction": "hitting" },
+    "15": { "ego_involved": true,  "participants": ["ego_car", "small_roadblocks_or_potholes"], "interaction": "hitting" },
+    "16": { "ego_involved": true,  "participants": ["ego_car", "trees"],                        "interaction": "hitting" },
+    "17": { "ego_involved": true,  "participants": ["ego_car", "telegraph_poles"],              "interaction": "hitting" },
+    "18": { "ego_involved": true,  "participants": ["ego_car", "other_road_facilities"],        "interaction": "hitting" },
+  
+    "19": { "ego_involved": false, "participants": ["motorbike", "large_roadblocks"],            "interaction": "out_of_control_or_hitting" },
+    "20": { "ego_involved": false, "participants": ["truck",    "large_roadblocks"],            "interaction": "out_of_control_or_hitting" },
+    "21": { "ego_involved": false, "participants": ["car",      "large_roadblocks"],            "interaction": "out_of_control_or_hitting" },
+  
+    "22": { "ego_involved": false, "participants": ["motorbike", "curb"],                         "interaction": "out_of_control_or_hitting" },
+    "23": { "ego_involved": false, "participants": ["truck",    "curb"],                         "interaction": "out_of_control_or_hitting" },
+    "24": { "ego_involved": false, "participants": ["car",      "curb"],                         "interaction": "out_of_control_or_hitting" },
+  
+    "25": { "ego_involved": false, "participants": ["motorbike", "small_roadblocks_or_potholes"], "interaction": "out_of_control_or_hitting" },
+    "26": { "ego_involved": false, "participants": ["truck",    "small_roadblocks_or_potholes"], "interaction": "out_of_control_or_hitting" },
+    "27": { "ego_involved": false, "participants": ["car",      "small_roadblocks_or_potholes"], "interaction": "out_of_control_or_hitting" },
+  
+    "28": { "ego_involved": false, "participants": ["motorbike", "trees"],                        "interaction": "out_of_control_or_hitting" },
+    "29": { "ego_involved": false, "participants": ["truck",    "trees"],                        "interaction": "out_of_control_or_hitting" },
+    "30": { "ego_involved": false, "participants": ["car",      "trees"],                        "interaction": "out_of_control_or_hitting" },
+  
+    "31": { "ego_involved": false, "participants": ["motorbike", "telegraph_poles"],              "interaction": "out_of_control_or_hitting" },
+    "32": { "ego_involved": false, "participants": ["truck",    "telegraph_poles"],              "interaction": "out_of_control_or_hitting" },
+    "33": { "ego_involved": false, "participants": ["car",      "telegraph_poles"],              "interaction": "out_of_control_or_hitting" },
+  
+    "34": { "ego_involved": false, "participants": ["motorbike", "other_road_facilities"],        "interaction": "out_of_control_or_hitting" },
+    "35": { "ego_involved": false, "participants": ["truck",    "other_road_facilities"],        "interaction": "out_of_control_or_hitting" },
+    "36": { "ego_involved": false, "participants": ["car",      "other_road_facilities"],        "interaction": "out_of_control_or_hitting" },
+  
+    "37": { "ego_involved": false, "participants": ["motorbike"], "interaction": "falling_down" },
+    "38": { "ego_involved": false, "participants": ["motorbike"], "interaction": "hitting" },
+  
+    "39": { "ego_involved": false, "participants": ["truck"], "interaction": "out_of_control" },
+    "40": { "ego_involved": false, "participants": ["truck"], "interaction": "hitting" },
+    "41": { "ego_involved": false, "participants": ["truck"], "interaction": "failure_of_components" },
+  
+    "42": { "ego_involved": false, "participants": ["car"], "interaction": "out_of_control" },
+    "43": { "ego_involved": false, "participants": ["car"], "interaction": "hitting" },
+    "44": { "ego_involved": false, "participants": ["car"], "interaction": "failure_of_components" },
+  
+    "45": { "ego_involved": false, "participants": ["motorbike","truck"], "interaction": "hitting" },
+    "46": { "ego_involved": false, "participants": ["motorbike","truck"], "interaction": "unknown_unmapped_in_legend" },
+    "47": { "ego_involved": false, "participants": ["motorbike","truck"], "interaction": "scratching" },
+  
+    "48": { "ego_involved": false, "participants": ["truck", "car"], "interaction": "hitting" },
+    "49": { "ego_involved": false, "participants": ["truck", "car"], "interaction": "scratching" },
+  
+    "50": { "ego_involved": false, "participants": ["motorbike", "car"], "interaction": "hitting" },
+    "51": { "ego_involved": false, "participants": ["motorbike", "car"], "interaction": "scratching" },
+  
+    "52": { "ego_involved": false, "participants": ["motorbike", "pedestrian"], "interaction": "hitting" },
+    "53": { "ego_involved": false, "participants": ["truck",    "pedestrian"], "interaction": "hitting" },
+    "54": { "ego_involved": false, "participants": ["car",      "pedestrian"], "interaction": "hitting" },
+  
+    "55": { "ego_involved": false, "participants": ["motorbike", "cyclist"], "interaction": "hitting" },
+    "56": { "ego_involved": false, "participants": ["truck",    "cyclist"], "interaction": "hitting" },
+    "57": { "ego_involved": false, "participants": ["car",      "cyclist"], "interaction": "hitting" },
+  
+    "58": { "ego_involved": false, "participants": ["pedestrian"], "interaction": "falling_down" },
+    "59": { "ego_involved": false, "participants": ["cyclist"],    "interaction": "falling_down" },
+    "60": { "ego_involved": false, "participants": ["cyclist"],    "interaction": "hitting" },
+  
+    "61": { "ego_involved": true,  "participants": ["ego_car"], "interaction": "out_of_control" },
+    "62": { "ego_involved": true,  "participants": ["ego_car"], "interaction": "failure_of_components" }
+  }
+  

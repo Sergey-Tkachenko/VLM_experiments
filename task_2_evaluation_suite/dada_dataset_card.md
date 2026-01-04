@@ -10,12 +10,48 @@ DADA-2000 is a dashcam accident dataset intended for **accident understanding/an
 
 - Paper (original benchmark): https://arxiv.org/abs/1904.12634
 
+- Fang, Jianwu, Dingxin Yan, Jiahuan Qiao, Jianru Xue, and Hongkai Yu. "DADA: Driver Attention Prediction in Driving Accident Scenarios." IEEE Transactions on Intelligent Transportation Systems 23, no. 6 (2022): 4959-4971.
+
 - GitHub / download page (LOTVS-DADA): https://github.com/JWFangit/LOTVS-DADA
 
-## 1. What’s in the annotation file
+- Mirror I used: https://huggingface.co/datasets/JeffreyChou/MM-AU/tree/main
 
-- `Sheet1`: per-sample metadata (weather/light/scene/road), event `type`, accident flag, and frame markers (`abnormal start`, `accident frame`, `abnormal end`) + text fields (`texts`, `causes`, `measures`).
-- `text`: a small dictionary of text templates grouped by an ID (38 groups in this file).
+## 1. Dataset structure and annotation file contents
+
+The DADA-2000 dataset is organized as follows:
+
+### File and Folder Structure
+
+The dataset contains a large collection of road accident video samples, each represented as a folder of sequential images (frames). The directory structure is illustrated below:
+
+```
+/workspace/datasets/mm-au/Origin/DADA2000/DADA2000/
+└── 1/                           # Example subset/fold
+    └── 001/                     # Sample ID
+        └── images/
+            ├── 0001.png
+            ├── 0002.png
+            ├── 0003.png
+            ├── ...
+            └── 0409.png        # Last frame in this sample
+```
+
+Each `images/` directory contains frame images in PNG format, named with sequential numbering.
+
+*Note:* The original dataset release also includes segmentation masks, driver attention masks, and other modalities in sibling folders to the images, but these are **out of scope** for this evaluation.
+
+### Annotation spreadsheet
+
+Annotations are stored in an XLSX file:
+```
+/workspace/datasets/mm-au/dada_text_annotations.xlsx
+```
+with the following important sheets:
+
+- **`Sheet1`**: Per-sample metadata including weather, lighting, scene, road type, accident event `type`, accident flag, frame markers (`abnormal start`, `accident frame`, `abnormal end`), and text fields (`texts`, `causes`, `measures`).
+- **`text`**: Lookup dictionary of candidate text descriptions, grouped by ID (38 groups in this file).
+
+**Only the image sequences and spreadsheet annotations are currently considered; segmentation/attention masks and other auxiliary files from the original dataset are not used in this evaluation.**
 
 ## 2. General stats
 
