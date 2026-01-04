@@ -23,6 +23,16 @@ Optional: install `ffmpeg` system-wide if you want video IO tests to exercise co
 sudo apt-get update && sudo apt-get install -y ffmpeg
 ```
 
+## DADA-2000 splits
+
+The DADA-2000 evaluation splits are rebuilt with these main decisions:
+
+- Keep only the 19 popular `type` labels: 11, 43, 50, 10, 5, 6, 37, 48, 38, 8, 1, 57, 12, 49, 56, 14, 39, 42, 9.
+- Honor the provided origin `train/val/test` assignments for those labels, dropping unpopular classes from the existing splits.
+- Assign remaining clips using per-class proportional stratification with largest-remainder rounding and a fixed seed.
+- Use target ratio weights `3/1/3` for train/val/test, keeping class proportions consistent across splits.
+- If a clip appears in multiple splits, log a warning and default it to `test`.
+
 ## Tests
 
 Run the full test suite:
