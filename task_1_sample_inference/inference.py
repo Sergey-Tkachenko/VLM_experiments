@@ -174,7 +174,14 @@ class QwenVideoInferencer:
             self.model.to(device)
         self.processor = processor or AutoProcessor.from_pretrained(model_id)
 
-    def run_inference(self, frames: np.ndarray, prompt: str, max_new_tokens: int = 256) -> str:
+    def run_inference(
+        self,
+        frames: np.ndarray,
+        prompt: str,
+        max_new_tokens: int = 256,
+        max_pixels: int | None = None,
+        min_pixels: int | None = None,
+    ) -> str:
         conversation = [
             {
                 "role": "user",
@@ -193,6 +200,8 @@ class QwenVideoInferencer:
             text=[prompt_text],
             videos=[frames],
             return_tensors="pt",
+            max_pixels=max_pixels,
+            min_pixels=min_pixels,
         ).to(self.model.device)
         generated = self.model.generate(**inputs, max_new_tokens=max_new_tokens)
         trimmed = [out[len(inp) :] for inp, out in zip(inputs.input_ids, generated)]
@@ -200,12 +209,57 @@ class QwenVideoInferencer:
             trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=True
         )[0]
 
+    def run_batch_inference(
+        self,
+        videos: list[np.ndarray],
+        prompts: list[str],
+        max_new_tokens: int = 256,
+        max_pixels: int | None = None,
+        min_pixels: int | None = None,
+    ) -> list[str]:
+        if len(videos) != len(prompts):
+            raise ValueError("videos and prompts must have the same length.")
+        conversations = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "video"},
+                        {"type": "text", "text": prompt},
+                    ],
+                }
+            ]
+            for prompt in prompts
+        ]
+        prompt_texts = [
+            self.processor.apply_chat_template(
+                conversation,
+                add_generation_prompt=True,
+                tokenize=False,
+            )
+            for conversation in conversations
+        ]
+        inputs = self.processor(
+            text=prompt_texts,
+            videos=videos,
+            return_tensors="pt",
+            max_pixels=max_pixels,
+            min_pixels=min_pixels,
+        ).to(self.model.device)
+        generated = self.model.generate(**inputs, max_new_tokens=max_new_tokens)
+        trimmed = [out[len(inp) :] for inp, out in zip(inputs.input_ids, generated)]
+        return self.processor.batch_decode(
+            trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=True
+        )
+
     def infer(
         self,
         frames: np.ndarray,
         schema_model: type[BaseModel],
         max_retries: int = 1,
         max_new_tokens: int = 256,
+        max_pixels: int | None = None,
+        min_pixels: int | None = None,
     ) -> dict[str, Any]:
         schema_json = json.dumps(schema_model.model_json_schema(), ensure_ascii=False)
         attempts = max_retries + 1
@@ -214,7 +268,13 @@ class QwenVideoInferencer:
             prompt = build_prompt(schema_json, schema_model)
             if attempt > 1:
                 prompt += "\nYour previous response was invalid JSON. Respond with JSON only."
-            raw_text = self.run_inference(frames, prompt, max_new_tokens=max_new_tokens)
+            raw_text = self.run_inference(
+                frames,
+                prompt,
+                max_new_tokens=max_new_tokens,
+                max_pixels=max_pixels,
+                min_pixels=min_pixels,
+            )
             try:
                 return parse_to_json(raw_text, schema_model)
             except ValueError as exc:
@@ -223,3 +283,69 @@ class QwenVideoInferencer:
         if last_error:
             raise last_error
         raise RuntimeError("Inference failed without producing output.")
+
+    def infer_batch(
+        self,
+        videos: list[np.ndarray],
+        schema_model: type[BaseModel],
+        max_retries: int = 3,
+        max_new_tokens: int = 256,
+        max_pixels: int | None = None,
+        min_pixels: int | None = None,
+    ) -> list[InferenceOutcome]:
+        """Run batched inference and retry JSON parsing failures per item."""
+        if not videos:
+            raise ValueError("videos batch must not be empty.")
+        if max_retries < 0:
+            raise ValueError("max_retries must be >= 0.")
+
+        schema_json = json.dumps(schema_model.model_json_schema(), ensure_ascii=False)
+        base_prompt = build_prompt(schema_json, schema_model)
+        outcomes: list[InferenceOutcome | None] = [None] * len(videos)
+        pending = list(range(len(videos)))
+
+        for attempt in range(1, max_retries + 2):
+            if not pending:
+                break
+            prompts = [base_prompt] * len(pending)
+            if attempt > 1:
+                retry_prompt = f"{base_prompt}\nYour previous response was invalid JSON. Respond with JSON only."
+                prompts = [retry_prompt] * len(pending)
+            batch_videos = [videos[idx] for idx in pending]
+            outputs = self.run_batch_inference(
+                batch_videos,
+                prompts,
+                max_new_tokens=max_new_tokens,
+                max_pixels=max_pixels,
+                min_pixels=min_pixels,
+            )
+            next_pending: list[int] = []
+            for idx, raw_text in zip(pending, outputs):
+                try:
+                    parsed = parse_to_json(raw_text, schema_model)
+                    outcomes[idx] = InferenceOutcome(parsed=parsed, raw_text=raw_text, error=None, attempts=attempt)
+                except ValueError as exc:
+                    outcomes[idx] = InferenceOutcome(
+                        parsed=None,
+                        raw_text=raw_text,
+                        error=str(exc),
+                        attempts=attempt,
+                    )
+                    if attempt <= max_retries:
+                        next_pending.append(idx)
+            pending = next_pending
+
+        return [
+            outcome if outcome is not None else InferenceOutcome(None, "", "No output", 0)
+            for outcome in outcomes
+        ]
+
+
+@dataclass(frozen=True)
+class InferenceOutcome:
+    """Container for batched inference outputs."""
+
+    parsed: dict[str, Any] | None
+    raw_text: str
+    error: str | None
+    attempts: int
