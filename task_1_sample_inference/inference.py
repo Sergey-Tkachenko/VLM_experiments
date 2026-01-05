@@ -13,16 +13,6 @@ from pydantic import BaseModel, Field, ValidationError
 from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
 
 
-PROMPT_TEMPLATE = (
-    "Analyze the dashcam video.\n"
-    "Return ONLY valid JSON that matches this JSON Schema:\n"
-    "{schema_json}\n"
-    "Field descriptions:\n"
-    "{field_descriptions}\n"
-    "No markdown, no extra keys, no trailing text."
-)
-
-
 class DashcamSchema(BaseModel):
     """Schema for dashcam analysis outputs."""
 
@@ -123,28 +113,6 @@ def load_video(
     return VideoSample(frames=frames, effective_fps=effective_fps)
 
 
-def _format_field_descriptions(schema_model: type[BaseModel]) -> str:
-    schema = schema_model.model_json_schema()
-    properties = schema.get("properties", {})
-    lines = []
-    for name, meta in properties.items():
-        field_type = meta.get("type", "unknown")
-        desc = meta.get("description", "").strip()
-        if desc:
-            lines.append(f"- {name} ({field_type}): {desc}")
-        else:
-            lines.append(f"- {name} ({field_type})")
-    return "\n".join(lines)
-
-
-def build_prompt(schema_json: str, schema_model: type[BaseModel]) -> str:
-    """Create a strict JSON-only prompt with schema guidance."""
-    return PROMPT_TEMPLATE.format(
-        schema_json=schema_json,
-        field_descriptions=_format_field_descriptions(schema_model),
-    )
-
-
 def parse_to_json(text: str, schema_model: type[BaseModel]) -> dict[str, Any]:
     """Parse and validate JSON output using a Pydantic schema."""
     try:
@@ -178,6 +146,7 @@ class QwenVideoInferencer:
         self,
         frames: np.ndarray,
         prompt: str,
+        sample_fps: float,
         max_new_tokens: int = 256,
         max_pixels: int | None = None,
         min_pixels: int | None = None,
@@ -199,6 +168,7 @@ class QwenVideoInferencer:
         inputs = self.processor(
             text=[prompt_text],
             videos=[frames],
+            fps=sample_fps,
             return_tensors="pt",
             max_pixels=max_pixels,
             min_pixels=min_pixels,
@@ -213,6 +183,7 @@ class QwenVideoInferencer:
         self,
         videos: list[np.ndarray],
         prompts: list[str],
+        sample_fps: float | list[float],
         max_new_tokens: int = 256,
         max_pixels: int | None = None,
         min_pixels: int | None = None,
@@ -239,9 +210,20 @@ class QwenVideoInferencer:
             )
             for conversation in conversations
         ]
+        fps_values: list[float] | None = None
+        if isinstance(sample_fps, float):
+            fps_values = [sample_fps] * len(videos)
+        elif isinstance(sample_fps, list):
+            if len(sample_fps) != len(videos):
+                raise ValueError("sample_fps list must match videos length.")
+            fps_values = sample_fps
+        else:
+            raise ValueError("sample_fps must be a float or list of floats.")
+
         inputs = self.processor(
             text=prompt_texts,
             videos=videos,
+            fps=fps_values,
             return_tensors="pt",
             max_pixels=max_pixels,
             min_pixels=min_pixels,
@@ -255,22 +237,25 @@ class QwenVideoInferencer:
     def infer(
         self,
         frames: np.ndarray,
+        prompt: str,
         schema_model: type[BaseModel],
+        sample_fps: float,
         max_retries: int = 1,
         max_new_tokens: int = 256,
         max_pixels: int | None = None,
         min_pixels: int | None = None,
     ) -> dict[str, Any]:
-        schema_json = json.dumps(schema_model.model_json_schema(), ensure_ascii=False)
         attempts = max_retries + 1
         last_error: Exception | None = None
         for attempt in range(1, attempts + 1):
-            prompt = build_prompt(schema_json, schema_model)
             if attempt > 1:
-                prompt += "\nYour previous response was invalid JSON. Respond with JSON only."
+                attempt_prompt = f"{prompt}\nYour previous response was invalid JSON. Respond with JSON only."
+            else:
+                attempt_prompt = prompt
             raw_text = self.run_inference(
                 frames,
-                prompt,
+                attempt_prompt,
+                sample_fps=sample_fps,
                 max_new_tokens=max_new_tokens,
                 max_pixels=max_pixels,
                 min_pixels=min_pixels,
@@ -287,34 +272,37 @@ class QwenVideoInferencer:
     def infer_batch(
         self,
         videos: list[np.ndarray],
+        prompt: str,
         schema_model: type[BaseModel],
+        sample_fps: float | list[float],
         max_retries: int = 3,
         max_new_tokens: int = 256,
         max_pixels: int | None = None,
         min_pixels: int | None = None,
     ) -> list[InferenceOutcome]:
-        """Run batched inference and retry JSON parsing failures per item."""
+        """Run batched inference with a fixed prompt and retry JSON parsing failures per item."""
         if not videos:
             raise ValueError("videos batch must not be empty.")
         if max_retries < 0:
             raise ValueError("max_retries must be >= 0.")
 
-        schema_json = json.dumps(schema_model.model_json_schema(), ensure_ascii=False)
-        base_prompt = build_prompt(schema_json, schema_model)
         outcomes: list[InferenceOutcome | None] = [None] * len(videos)
         pending = list(range(len(videos)))
 
         for attempt in range(1, max_retries + 2):
             if not pending:
                 break
-            prompts = [base_prompt] * len(pending)
             if attempt > 1:
-                retry_prompt = f"{base_prompt}\nYour previous response was invalid JSON. Respond with JSON only."
-                prompts = [retry_prompt] * len(pending)
+                # TODO: remove this retry prompt, always retry with the same prompt
+                attempt_prompt = f"{prompt}\nYour previous response was invalid JSON. Respond with JSON only."
+            else:
+                attempt_prompt = prompt
+            prompts = [attempt_prompt] * len(pending)
             batch_videos = [videos[idx] for idx in pending]
             outputs = self.run_batch_inference(
                 batch_videos,
                 prompts,
+                sample_fps=sample_fps,
                 max_new_tokens=max_new_tokens,
                 max_pixels=max_pixels,
                 min_pixels=min_pixels,

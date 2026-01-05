@@ -13,6 +13,7 @@ class DummyInferencer(QwenVideoInferencer):
         self,
         videos: list[np.ndarray],
         prompts: list[str],
+        sample_fps: float | list[float],
         max_new_tokens: int = 256,
         max_pixels: int | None = None,
         min_pixels: int | None = None,
@@ -29,7 +30,13 @@ def test_infer_batch_retries_failed_json() -> None:
     ]
     inferencer = DummyInferencer(outputs)
     videos = [np.zeros((2, 2, 2, 3), dtype=np.uint8) for _ in range(2)]
-    results = inferencer.infer_batch(videos, DadaAccidentSchema, max_retries=1)
+    results = inferencer.infer_batch(
+        videos,
+        "test prompt",
+        DadaAccidentSchema,
+        sample_fps=2.0,
+        max_retries=1,
+    )
 
     assert isinstance(results[0], InferenceOutcome)
     assert results[0].parsed is not None

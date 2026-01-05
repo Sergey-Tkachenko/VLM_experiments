@@ -1,0 +1,6 @@
+Analyze the dashcam clip and identify the accident type and when it occurs.
+Return ONLY valid JSON that matches this JSON Schema:
+{{ json_schema }}
+Common accident types (short descriptions):
+{{ class_summaries }}
+No markdown, no extra keys, no trailing text.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -14,11 +15,17 @@ from loguru import logger
 from openpyxl import load_workbook
 from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-
-from task_1_sample_inference.inference import InferenceOutcome, QwenVideoInferencer
-
+from tqdm import tqdm
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
+sys.path.insert(0, str(REPO_ROOT))
+from task_1_sample_inference.inference import InferenceOutcome, QwenVideoInferencer
+from task_1_sample_inference.prompting import load_prompt_template, render_prompt
+
+
+PROMPT_PATH = Path(__file__).resolve().parent / "prompt.txt"
+CLASS_MAPPING_PATH = Path(__file__).resolve().parent / "type_id_to_parsed_description_mapping.json"
+POPULAR_CLASS_IDS = [11, 43, 50, 10, 5, 6, 37, 48, 38, 8, 1, 57, 12, 49, 56, 14, 39, 42, 9]
 
 
 class DadaAccidentSchema(BaseModel):
@@ -442,6 +449,48 @@ def _build_ground_truth(clip: ClipMeta, source_fps: float) -> dict[str, Any]:
     }
 
 
+def _format_participants(participants: list[str]) -> str:
+    """Convert participant identifiers into a readable phrase."""
+    readable = [participant.replace("_", " ") for participant in participants]
+    if readable == ["ego car", "car"]:
+        readable = ["ego car", "another car"]
+    if len(readable) == 2:
+        return f"{readable[0]} and {readable[1]}"
+    if len(readable) == 1:
+        return readable[0]
+    return ", ".join(readable)
+
+
+def _format_class_summaries(mapping_path: Path, class_ids: list[int]) -> str:
+    """Build a short summary list for selected class IDs."""
+    raw = json.loads(mapping_path.read_text(encoding="utf-8"))
+    lines = []
+    for class_id in class_ids:
+        entry = raw.get(str(class_id))
+        if entry is None:
+            raise ValueError(f"Class id {class_id} not found in mapping.")
+        participants = entry.get("participants", [])
+        interaction = entry.get("interaction", "unknown")
+        participants_text = _format_participants(participants)
+        interaction_text = interaction.replace("_", " ")
+        lines.append(f"{class_id} -- participants -- {participants_text}, interaction -- {interaction_text}")
+    return "\n".join(lines)
+
+
+def _build_eval_prompt(schema_model: type[BaseModel], prompt_path: Path, mapping_path: Path) -> str:
+    """Render the evaluation prompt template with schema and class summaries."""
+    schema_json = json.dumps(schema_model.model_json_schema(), ensure_ascii=False)
+    template_text = load_prompt_template(prompt_path)
+    class_summaries = _format_class_summaries(mapping_path, POPULAR_CLASS_IDS)
+    return render_prompt(
+        template_text,
+        {
+            "json_schema": schema_json,
+            "class_summaries": class_summaries,
+        },
+    )
+
+
 def _batch_indices(total: int, batch_size: int) -> list[list[int]]:
     if batch_size <= 0:
         raise ValueError("batch_size must be positive.")
@@ -505,6 +554,7 @@ def run_eval(config: EvalConfig, inferencer: QwenVideoInferencer | None = None) 
     Returns:
         Dictionary keyed by clip with prediction/metadata payloads.
     """
+    load_dotenv(REPO_ROOT / ".env")
     clips = load_split(config.eval.split_path)
     accident_map = load_accident_frames(config.eval.xlsx_path)
     clips = _attach_accident_frames(clips, accident_map)
@@ -524,17 +574,20 @@ def run_eval(config: EvalConfig, inferencer: QwenVideoInferencer | None = None) 
     )
 
     results: dict[str, dict[str, Any]] = {}
+    prompt = _build_eval_prompt(DadaAccidentSchema, PROMPT_PATH, CLASS_MAPPING_PATH)
     batches = _batch_indices(len(clips), batch_size)
-    for batch_idx, indices in enumerate(batches, start=1):
+    for batch_idx, indices in enumerate(tqdm(batches, desc="Batches"), start=1):
         if config.eval.limit_batches is not None and batch_idx > config.eval.limit_batches:
             logger.info("Stopping after {} batches due to limit_batches.", config.eval.limit_batches)
             break
         batch_clips, batch_frames = _prepare_batch(clips, indices, config.eval.dataset_root, config.preprocess)
         outputs = inferencer.infer_batch(
             batch_frames,
+            prompt,
             DadaAccidentSchema,
             max_retries=config.eval.max_retries,
             max_new_tokens=config.model.max_new_tokens,
+            sample_fps=config.preprocess.target_fps,
             max_pixels=config.preprocess.max_pixels,
             min_pixels=config.preprocess.min_pixels,
         )

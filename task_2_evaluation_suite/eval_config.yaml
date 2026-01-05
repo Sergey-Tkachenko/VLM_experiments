@@ -1,5 +1,5 @@
 model:
-  id: Qwen/Qwen2.5-VL-7B-Instruct
+  id: Qwen/Qwen2.5-VL-3B-Instruct
   device: cuda
   dtype: bfloat16
   max_new_tokens: 256
@@ -15,9 +15,7 @@ preprocess:
 hardware:
   default_batch_size: 1
   gpu_batch_sizes:
-    A4000: 1
-    4090: 2
-    5090: 2
+      "NVIDIA RTX 4000 Ada Generation": 2
 
 eval:
   split: val
@@ -26,5 +24,5 @@ eval:
   xlsx_path: /workspace/datasets/mm-au/dada_text_annotations.xlsx
   output_path: artifacts/evals/dada_eval_val.json
   max_retries: 3
-  limit_batches: null
+  limit_batches: 10
   dump_every_batches: 10

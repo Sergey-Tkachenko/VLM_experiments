@@ -14,9 +14,11 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from task_1_sample_inference.inference import DashcamSchema, QwenVideoInferencer, load_video
+from task_1_sample_inference.prompting import format_field_descriptions, load_prompt_template, render_prompt
 
 
 DEFAULT_MODEL_ID = "Qwen/Qwen2.5-VL-7B-Instruct"
+PROMPT_PATH = Path(__file__).resolve().parent / "prompt.txt"
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
@@ -38,6 +40,18 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _build_prompt(schema_model: type[DashcamSchema], prompt_path: Path) -> str:
+    schema_json = json.dumps(schema_model.model_json_schema(), ensure_ascii=False)
+    template_text = load_prompt_template(prompt_path)
+    return render_prompt(
+        template_text,
+        {
+            "json_schema": schema_json,
+            "field_descriptions": format_field_descriptions(schema_model),
+        },
+    )
+
+
 def main() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     load_dotenv(repo_root / ".env")
@@ -57,9 +71,12 @@ def main() -> None:
         device=args.device,
         dtype=torch.bfloat16,
     )
+    prompt = _build_prompt(DashcamSchema, PROMPT_PATH)
     result = inferencer.infer(
         frames=sample.frames,
+        prompt=prompt,
         schema_model=DashcamSchema,
+        sample_fps=sample.effective_fps,
         max_retries=args.max_retries,
     )
 
