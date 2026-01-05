@@ -1,8 +1,10 @@
 import os
 
+import pytest
 import torch
 
 
+@pytest.mark.integration
 def test_cuda_smoke() -> None:
     """Run a minimal CUDA operation to validate the runtime and driver."""
     if os.environ.get("VLM_SKIP_CUDA_TEST") == "1":

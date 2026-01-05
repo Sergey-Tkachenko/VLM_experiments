@@ -26,7 +26,9 @@ def _create_test_video(output_path: Path) -> None:
     subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 
+@pytest.mark.integration
 def test_load_video_uniform_and_windowed() -> None:
+    """Validate decord-backed sampling for a tiny synthetic clip."""
     if os.environ.get("VLM_SKIP_DECORD_TEST") == "1":
         return
     if shutil.which("ffmpeg") is None:

@@ -15,7 +15,7 @@ preprocess:
 hardware:
   default_batch_size: 1
   gpu_batch_sizes:
-      "NVIDIA RTX 4000 Ada Generation": 2
+      "NVIDIA RTX 4000 Ada Generation": 5
 
 eval:
   split: val

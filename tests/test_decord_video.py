@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+import pytest
 from decord import VideoReader, cpu
 
 
@@ -26,6 +27,7 @@ def _create_test_video(output_path: Path) -> None:
     subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 
+@pytest.mark.integration
 def test_decord_video_read() -> None:
     """Ensure decord can read a small video and return frames."""
     if os.environ.get("VLM_SKIP_DECORD_TEST") == "1":
