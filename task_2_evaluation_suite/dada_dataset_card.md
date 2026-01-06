@@ -28,15 +28,19 @@ The dataset contains a large collection of road accident video samples, each rep
 /workspace/datasets/mm-au/Origin/DADA2000/DADA2000/
 └── 1/                           # Example subset/fold
     └── 001/                     # Sample ID
-        └── images/
+        ├── images/
             ├── 0001.png
             ├── 0002.png
             ├── 0003.png
             ├── ...
             └── 0409.png        # Last frame in this sample
+        └── video.mp4            # Generated MP4 clip (30 fps)
 ```
 
 Each `images/` directory contains frame images in PNG format, named with sequential numbering.
+Each clip folder also contains a generated `video.mp4` created from the frames for faster I/O. The MP4s are produced with
+FFmpeg using H.264 (`libx264`) at 30 fps, `yuv420p` pixel format, CRF 23, preset `medium`, via `personal_scripts/build_videos.py`.
+Input frame codec is auto-detected (PNG or MJPEG) to match the on-disk bytes.
 
 *Note:* The original dataset release also includes segmentation masks, driver attention masks, and other modalities in sibling folders to the images, but these are **out of scope** for this evaluation.
 
