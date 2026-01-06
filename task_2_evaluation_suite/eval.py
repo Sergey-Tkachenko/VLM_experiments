@@ -22,6 +22,9 @@ sys.path.insert(0, str(REPO_ROOT))
 from task_1_sample_inference.inference import InferenceOutcome, QwenVideoInferencer
 from task_1_sample_inference.prompting import load_prompt_template, render_prompt
 
+from dotenv import load_dotenv
+load_dotenv(REPO_ROOT / ".env")
+
 
 PROMPT_PATH = Path(__file__).resolve().parent / "prompt.txt"
 CLASS_MAPPING_PATH = Path(__file__).resolve().parent / "type_id_to_parsed_description_mapping.json"

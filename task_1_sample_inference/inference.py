@@ -137,7 +137,7 @@ class QwenVideoInferencer:
         model: Qwen2_5_VLForConditionalGeneration | None = None,
         processor: AutoProcessor | None = None,
     ) -> None:
-        self.model = model or Qwen2_5_VLForConditionalGeneration.from_pretrained(model_id, torch_dtype=dtype)
+        self.model = model or Qwen2_5_VLForConditionalGeneration.from_pretrained(model_id, dtype=dtype, attn_implementation="flash_attention_2")
         if model is None:
             self.model.to(device)
         self.processor = processor or AutoProcessor.from_pretrained(model_id)

@@ -9,13 +9,13 @@ preprocess:
   source_fps: 30.0
   max_seconds: 16.0
   padding: repeat_first
-  max_pixels: 1368
+  max_pixels: 1072512 # 1596 * 672, origin resolution
   min_pixels: null
 
 hardware:
-  default_batch_size: 1
+  default_batch_size: 2
   gpu_batch_sizes:
-      "NVIDIA RTX 4000 Ada Generation": 5
+      "NVIDIA RTX 4000 Ada Generation": 2
 
 eval:
   split: val
@@ -24,5 +24,5 @@ eval:
   xlsx_path: /workspace/datasets/mm-au/dada_text_annotations.xlsx
   output_path: artifacts/evals/dada_eval_val.json
   max_retries: 3
-  limit_batches: 10
+  limit_batches: 3
   dump_every_batches: 10
