@@ -10,6 +10,7 @@ import torch
 from decord import VideoReader, cpu
 from loguru import logger
 from pydantic import BaseModel, Field, ValidationError
+from qwen_vl_utils import process_vision_info
 from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
 
 
@@ -129,6 +130,12 @@ def parse_to_json(text: str, schema_model: type[BaseModel]) -> dict[str, Any]:
 class QwenVideoInferencer:
     """Inference helper for Qwen2.5-VL with schema-validated outputs."""
 
+    @staticmethod
+    def _to_video_uri(path: str) -> str:
+        if path.startswith("file://"):
+            return path
+        return f"file://{Path(path).resolve()}"
+
     def __init__(
         self,
         model_id: str,
@@ -141,21 +148,31 @@ class QwenVideoInferencer:
         if model is None:
             self.model.to(device)
         self.processor = processor or AutoProcessor.from_pretrained(model_id)
+        if hasattr(self.processor, "tokenizer") and self.processor.tokenizer is not None:
+            self.processor.tokenizer.padding_side = "left"
 
     def run_inference(
         self,
-        frames: np.ndarray,
+        video_path: str,
         prompt: str,
         sample_fps: float,
+        max_frames: int | None,
         max_new_tokens: int = 256,
         max_pixels: int | None = None,
         min_pixels: int | None = None,
     ) -> str:
+        video_message: dict[str, Any] = {
+            "type": "video",
+            "video": self._to_video_uri(video_path),
+            "fps": sample_fps,
+        }
+        if max_frames is not None:
+            video_message["max_frames"] = max_frames
         conversation = [
             {
                 "role": "user",
                 "content": [
-                    {"type": "video"},
+                    video_message,
                     {"type": "text", "text": prompt},
                 ],
             }
@@ -165,13 +182,19 @@ class QwenVideoInferencer:
             add_generation_prompt=True,
             tokenize=False,
         )
+        image_inputs, video_inputs, video_kwargs = process_vision_info(
+            conversation, return_video_kwargs=True
+        )
+        video_kwargs = dict(video_kwargs)
+        video_kwargs.pop("fps", None)
         inputs = self.processor(
             text=[prompt_text],
-            videos=[frames],
-            fps=sample_fps,
+            images=image_inputs,
+            videos=video_inputs,
             return_tensors="pt",
-            max_pixels=max_pixels,
-            min_pixels=min_pixels,
+            **video_kwargs,
+            **({"max_pixels": max_pixels} if max_pixels is not None else {}),
+            **({"min_pixels": min_pixels} if min_pixels is not None else {}),
         ).to(self.model.device)
         generated = self.model.generate(**inputs, max_new_tokens=max_new_tokens)
         trimmed = [out[len(inp) :] for inp, out in zip(inputs.input_ids, generated)]
@@ -181,26 +204,32 @@ class QwenVideoInferencer:
 
     def run_batch_inference(
         self,
-        videos: list[np.ndarray],
+        video_paths: list[str],
         prompts: list[str],
-        sample_fps: float | list[float],
+        sample_fps: float,
+        max_frames: int | None,
         max_new_tokens: int = 256,
         max_pixels: int | None = None,
         min_pixels: int | None = None,
     ) -> list[str]:
-        if len(videos) != len(prompts):
-            raise ValueError("videos and prompts must have the same length.")
+        if len(video_paths) != len(prompts):
+            raise ValueError("video_paths and prompts must have the same length.")
         conversations = [
             [
                 {
                     "role": "user",
                     "content": [
-                        {"type": "video"},
+                        {
+                            "type": "video",
+                            "video": self._to_video_uri(video_path),
+                            "fps": sample_fps,
+                            **({"max_frames": max_frames} if max_frames is not None else {}),
+                        },
                         {"type": "text", "text": prompt},
                     ],
                 }
             ]
-            for prompt in prompts
+            for video_path, prompt in zip(video_paths, prompts)
         ]
         prompt_texts = [
             self.processor.apply_chat_template(
@@ -210,23 +239,20 @@ class QwenVideoInferencer:
             )
             for conversation in conversations
         ]
-        fps_values: list[float] | None = None
-        if isinstance(sample_fps, float):
-            fps_values = [sample_fps] * len(videos)
-        elif isinstance(sample_fps, list):
-            if len(sample_fps) != len(videos):
-                raise ValueError("sample_fps list must match videos length.")
-            fps_values = sample_fps
-        else:
-            raise ValueError("sample_fps must be a float or list of floats.")
-
+        image_inputs, video_inputs, video_kwargs = process_vision_info(
+            conversations, return_video_kwargs=True
+        )
+        video_kwargs = dict(video_kwargs)
+        video_kwargs.pop("fps", None)
         inputs = self.processor(
             text=prompt_texts,
-            videos=videos,
-            fps=fps_values,
+            images=image_inputs,
+            videos=video_inputs,
+            padding=True,
             return_tensors="pt",
-            max_pixels=max_pixels,
-            min_pixels=min_pixels,
+            **video_kwargs,
+            **({"max_pixels": max_pixels} if max_pixels is not None else {}),
+            **({"min_pixels": min_pixels} if min_pixels is not None else {}),
         ).to(self.model.device)
         generated = self.model.generate(**inputs, max_new_tokens=max_new_tokens)
         trimmed = [out[len(inp) :] for inp, out in zip(inputs.input_ids, generated)]
@@ -236,10 +262,11 @@ class QwenVideoInferencer:
 
     def infer(
         self,
-        frames: np.ndarray,
+        video_path: str,
         prompt: str,
         schema_model: type[BaseModel],
         sample_fps: float,
+        max_frames: int | None,
         max_retries: int = 1,
         max_new_tokens: int = 256,
         max_pixels: int | None = None,
@@ -253,9 +280,10 @@ class QwenVideoInferencer:
             else:
                 attempt_prompt = prompt
             raw_text = self.run_inference(
-                frames,
+                video_path,
                 attempt_prompt,
                 sample_fps=sample_fps,
+                max_frames=max_frames,
                 max_new_tokens=max_new_tokens,
                 max_pixels=max_pixels,
                 min_pixels=min_pixels,
@@ -271,23 +299,24 @@ class QwenVideoInferencer:
 
     def infer_batch(
         self,
-        videos: list[np.ndarray],
+        video_paths: list[str],
         prompt: str,
         schema_model: type[BaseModel],
-        sample_fps: float | list[float],
+        sample_fps: float,
+        max_frames: int | None,
         max_retries: int = 3,
         max_new_tokens: int = 256,
         max_pixels: int | None = None,
         min_pixels: int | None = None,
     ) -> list[InferenceOutcome]:
         """Run batched inference with a fixed prompt and retry JSON parsing failures per item."""
-        if not videos:
-            raise ValueError("videos batch must not be empty.")
+        if not video_paths:
+            raise ValueError("video_paths batch must not be empty.")
         if max_retries < 0:
             raise ValueError("max_retries must be >= 0.")
 
-        outcomes: list[InferenceOutcome | None] = [None] * len(videos)
-        pending = list(range(len(videos)))
+        outcomes: list[InferenceOutcome | None] = [None] * len(video_paths)
+        pending = list(range(len(video_paths)))
 
         for attempt in range(1, max_retries + 2):
             if not pending:
@@ -298,11 +327,12 @@ class QwenVideoInferencer:
             else:
                 attempt_prompt = prompt
             prompts = [attempt_prompt] * len(pending)
-            batch_videos = [videos[idx] for idx in pending]
+            batch_video_paths = [video_paths[idx] for idx in pending]
             outputs = self.run_batch_inference(
-                batch_videos,
+                batch_video_paths,
                 prompts,
                 sample_fps=sample_fps,
+                max_frames=max_frames,
                 max_new_tokens=max_new_tokens,
                 max_pixels=max_pixels,
                 min_pixels=min_pixels,

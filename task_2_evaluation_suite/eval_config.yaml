@@ -8,7 +8,6 @@ preprocess:
   target_fps: 2.0
   source_fps: 30.0
   max_seconds: 16.0
-  padding: repeat_first
   max_pixels: 1072512 # 1596 * 672, origin resolution
   min_pixels: null
 
@@ -19,10 +18,11 @@ hardware:
 
 eval:
   split: val
-  split_path: task_2_evaluation_suite/val.json
+  # split_path: task_2_evaluation_suite/val.json
+  split_path: artifacts/debug.json
   dataset_root: /workspace/datasets/mm-au/Origin/DADA2000/DADA2000
   xlsx_path: /workspace/datasets/mm-au/dada_text_annotations.xlsx
   output_path: artifacts/evals/dada_eval_val.json
   max_retries: 3
-  limit_batches: 3
+  limit_batches: 10
   dump_every_batches: 10

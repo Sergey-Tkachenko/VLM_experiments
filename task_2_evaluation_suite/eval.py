@@ -5,25 +5,24 @@ import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
-import numpy as np
 import torch
 import yaml
 from dotenv import load_dotenv
 from loguru import logger
 from openpyxl import load_workbook
-from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from tqdm import tqdm
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+load_dotenv(REPO_ROOT / ".env")
 
 sys.path.insert(0, str(REPO_ROOT))
 from task_1_sample_inference.inference import InferenceOutcome, QwenVideoInferencer
 from task_1_sample_inference.prompting import load_prompt_template, render_prompt
 
-from dotenv import load_dotenv
-load_dotenv(REPO_ROOT / ".env")
+
 
 
 PROMPT_PATH = Path(__file__).resolve().parent / "prompt.txt"
@@ -82,14 +81,13 @@ class ModelConfig(BaseModel):
 
 
 class PreprocessConfig(BaseModel):
-    """Configuration for preprocessing frames."""
+    """Configuration for preprocessing videos."""
 
     model_config = ConfigDict(extra="forbid")
 
     target_fps: float
     source_fps: float
     max_seconds: float
-    padding: Literal["repeat_first"]
     max_pixels: int | None
     min_pixels: int | None
 
@@ -298,78 +296,14 @@ def load_accident_frames(xlsx_path: Path) -> dict[tuple[str, str], int | None]:
     return mapping
 
 
-def load_clip_frames(clip_dir: Path) -> list[np.ndarray]:
-    """Load clip frames from an image sequence.
-
-    Args:
-        clip_dir: Clip directory containing an images/ folder.
-
-    Returns:
-        List of RGB frames as numpy arrays.
-    """
-    frames_dir = clip_dir / "images"
-    if not frames_dir.exists():
-        raise FileNotFoundError(f"Frames directory not found: {frames_dir}")
-    frame_paths = sorted(frames_dir.glob("*.png"))
-    if not frame_paths:
-        raise FileNotFoundError(f"No PNG frames found in {frames_dir}")
-    frames = []
-    for path in frame_paths:
-        with Image.open(path) as img:
-            frames.append(np.array(img.convert("RGB")))
-    return frames
-
-
-def _compute_stride(source_fps: float, target_fps: float) -> int:
-    if target_fps <= 0:
-        raise ValueError("target_fps must be positive.")
-    if source_fps <= 0:
-        raise ValueError("source_fps must be positive.")
-    return max(1, int(round(source_fps / target_fps)))
-
-
-def _compute_max_frames(target_fps: float, max_seconds: float) -> int:
+def compute_max_frames(target_fps: float, max_seconds: float) -> int:
+    """Compute maximum frames for a clip length budget."""
     if max_seconds <= 0:
         raise ValueError("max_seconds must be positive.")
     max_frames = int(round(target_fps * max_seconds))
     if max_frames <= 0:
         raise ValueError("max_frames must be positive.")
     return max_frames
-
-
-def sample_and_clip_frames(
-    frames: list[np.ndarray],
-    source_fps: float,
-    target_fps: float,
-    max_seconds: float,
-    padding: Literal["repeat_first"],
-) -> np.ndarray:
-    """Sample frames at a target FPS and clip/pad to fixed duration.
-
-    Args:
-        frames: List of RGB frames.
-        source_fps: Source FPS for the dataset.
-        target_fps: Target sampling FPS.
-        max_seconds: Fixed clip duration in seconds.
-        padding: Padding strategy for short clips.
-
-    Returns:
-        Stacked frames with uniform length.
-    """
-    if not frames:
-        raise ValueError("frames list must not be empty.")
-    stride = _compute_stride(source_fps, target_fps)
-    indices = list(range(0, len(frames), stride))
-    sampled = [frames[idx] for idx in indices]
-    max_frames = _compute_max_frames(target_fps, max_seconds)
-    clipped = sampled[:max_frames]
-    if len(clipped) < max_frames:
-        if padding != "repeat_first":
-            raise ValueError(f"Unsupported padding strategy: {padding}")
-        pad_count = max_frames - len(clipped)
-        pad_frame = clipped[0] if clipped else sampled[0]
-        clipped.extend([pad_frame] * pad_count)
-    return np.stack(clipped, axis=0)
 
 
 def _get_gpu_name() -> str:
@@ -505,22 +439,16 @@ def _prepare_batch(
     clips: list[ClipMeta],
     indices: list[int],
     dataset_root: Path,
-    preprocess: PreprocessConfig,
-) -> tuple[list[ClipMeta], list[np.ndarray]]:
+) -> tuple[list[ClipMeta], list[str]]:
     batch_clips = [clips[idx] for idx in indices]
-    batch_frames = []
+    batch_video_paths = []
     for clip in batch_clips:
         clip_dir = dataset_root / clip.type_id / clip.video_id
-        frames = load_clip_frames(clip_dir)
-        processed = sample_and_clip_frames(
-            frames,
-            source_fps=preprocess.source_fps,
-            target_fps=preprocess.target_fps,
-            max_seconds=preprocess.max_seconds,
-            padding=preprocess.padding,
-        )
-        batch_frames.append(processed)
-    return batch_clips, batch_frames
+        video_path = clip_dir / "video.mp4"
+        if not video_path.exists():
+            raise FileNotFoundError(f"Video not found: {video_path}")
+        batch_video_paths.append(str(video_path))
+    return batch_clips, batch_video_paths
 
 
 def _merge_results(
@@ -578,19 +506,21 @@ def run_eval(config: EvalConfig, inferencer: QwenVideoInferencer | None = None) 
 
     results: dict[str, dict[str, Any]] = {}
     prompt = _build_eval_prompt(DadaAccidentSchema, PROMPT_PATH, CLASS_MAPPING_PATH)
+    max_frames = compute_max_frames(config.preprocess.target_fps, config.preprocess.max_seconds)
     batches = _batch_indices(len(clips), batch_size)
     for batch_idx, indices in enumerate(tqdm(batches, desc="Batches"), start=1):
         if config.eval.limit_batches is not None and batch_idx > config.eval.limit_batches:
             logger.info("Stopping after {} batches due to limit_batches.", config.eval.limit_batches)
             break
-        batch_clips, batch_frames = _prepare_batch(clips, indices, config.eval.dataset_root, config.preprocess)
+        batch_clips, batch_video_paths = _prepare_batch(clips, indices, config.eval.dataset_root)
         outputs = inferencer.infer_batch(
-            batch_frames,
+            batch_video_paths,
             prompt,
             DadaAccidentSchema,
             max_retries=config.eval.max_retries,
             max_new_tokens=config.model.max_new_tokens,
             sample_fps=config.preprocess.target_fps,
+            max_frames=max_frames,
             max_pixels=config.preprocess.max_pixels,
             min_pixels=config.preprocess.min_pixels,
         )
