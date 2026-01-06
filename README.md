@@ -8,12 +8,11 @@ Fang, Jianwu, Dingxin Yan, Jiahuan Qiao, Jianru Xue, and Hongkai Yu. "DADA: Driv
 
 ## Setup
 
-This repo uses `uv` for dependency management. The RunPod image already includes PyTorch 2.4, so we avoid reinstalling it
-by creating a venv that can access system site packages.
+This repo uses `uv` for dependency management. The venv installs PyTorch locally so it does not rely on system site packages.
 
 ```bash
 python -m pip install uv
-uv venv --system-site-packages
+uv venv
 uv sync --group dev
 ```
 
