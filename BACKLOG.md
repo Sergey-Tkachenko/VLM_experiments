@@ -22,3 +22,11 @@ Qwen 2.5 VL has a lot of configs, which I did not touch in the task 1. They migh
 # Expand qualititative analysis further
 
 20 -> 100, goal -- ensure noise level is acceptable (< 5%). Make sure you respect train/test/val split, regarding only train/val samples.
+
+
+# Strange bug with resoultion
+
+When I dropeed pixels 4fold in the eval config, eval speed did not improved -- though it is 4 times less pixels for prefill, which I believed is the most time-consuming part. It is strange -- we need to find out the reason for it.
+
+Hypothesis:
+1. We cut total number of visual tokens for both resolutions to something smaller that what we have in config

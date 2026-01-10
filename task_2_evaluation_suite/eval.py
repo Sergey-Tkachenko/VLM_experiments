@@ -14,12 +14,13 @@ from openpyxl import load_workbook
 from pydantic import BaseModel, Field
 from tqdm import tqdm
 
-from task_2_evaluation_suite.config_loader import EvalConfig, load_eval_config
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 load_dotenv(REPO_ROOT / ".env")
 
 sys.path.insert(0, str(REPO_ROOT))
+
+from task_2_evaluation_suite.config_loader import EvalConfig, load_eval_config
 from task_1_sample_inference.inference import InferenceOutcome, QwenVideoInferencer
 from task_1_sample_inference.prompting import load_prompt_template, render_prompt
 
@@ -298,13 +299,47 @@ def _prepare_batch(
 ) -> tuple[list[ClipMeta], list[str]]:
     batch_clips = [clips[idx] for idx in indices]
     batch_video_paths = []
+    existing_clips: list[ClipMeta] = []
     for clip in batch_clips:
         clip_dir = dataset_root / clip.type_id / clip.video_id
         video_path = clip_dir / "video.mp4"
         if not video_path.exists():
-            raise FileNotFoundError(f"Video not found: {video_path}")
+            logger.warning("Video not found; skipping clip {}: {}", _to_clip_key(clip), video_path)
+            continue
+        existing_clips.append(clip)
         batch_video_paths.append(str(video_path))
-    return batch_clips, batch_video_paths
+    return existing_clips, batch_video_paths
+
+
+def _load_existing_results(output_path: Path) -> dict[str, dict[str, Any]]:
+    if not output_path.exists():
+        return {}
+    try:
+        raw = json.loads(output_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        logger.warning("Existing results at {} are invalid JSON; ignoring. ({})", output_path, exc)
+        return {}
+    if not isinstance(raw, dict):
+        logger.warning("Existing results at {} are not a dictionary; ignoring.", output_path)
+        return {}
+    return raw
+
+
+def _collect_completed_keys(results: dict[str, dict[str, Any]]) -> set[str]:
+    return {clip_key for clip_key, record in results.items() if record.get("json_valid") is True}
+
+
+def _filter_clips_by_keys(clips: list[ClipMeta], excluded_keys: set[str]) -> tuple[list[ClipMeta], int]:
+    if not excluded_keys:
+        return clips, 0
+    remaining: list[ClipMeta] = []
+    skipped = 0
+    for clip in clips:
+        if _to_clip_key(clip) in excluded_keys:
+            skipped += 1
+            continue
+        remaining.append(clip)
+    return remaining, skipped
 
 
 def _merge_results(
@@ -331,7 +366,11 @@ def _dump_results(output_path: Path, results: dict[str, dict[str, Any]]) -> None
     output_path.write_text(json.dumps(results, ensure_ascii=False), encoding="utf-8")
 
 
-def run_eval(config: EvalConfig, inferencer: QwenVideoInferencer | None = None) -> dict[str, dict[str, Any]]:
+def run_eval(
+    config: EvalConfig,
+    inferencer: QwenVideoInferencer | None = None,
+    overwrite: bool = False,
+) -> dict[str, dict[str, Any]]:
     """Run evaluation over a dataset split and return results.
 
     Args:
@@ -345,6 +384,12 @@ def run_eval(config: EvalConfig, inferencer: QwenVideoInferencer | None = None) 
     clips = load_split(config.eval.split_path)
     accident_map = load_accident_frames(config.eval.xlsx_path)
     clips = _attach_accident_frames(clips, accident_map)
+
+    existing_results = {} if overwrite else _load_existing_results(config.eval.output_path)
+    completed_keys = _collect_completed_keys(existing_results)
+    clips, skipped = _filter_clips_by_keys(clips, completed_keys)
+    if skipped > 0:
+        logger.info("Found {} already evaluated clips; proceeding with {} remaining.", skipped, len(clips))
 
     gpu_name = _get_gpu_name()
     batch_size = resolve_batch_size(
@@ -360,7 +405,7 @@ def run_eval(config: EvalConfig, inferencer: QwenVideoInferencer | None = None) 
         dtype=config.model.dtype,
     )
 
-    results: dict[str, dict[str, Any]] = {}
+    results: dict[str, dict[str, Any]] = dict(existing_results)
     prompt = _build_eval_prompt(DadaAccidentSchema, PROMPT_PATH, CLASS_MAPPING_PATH)
     max_frames = compute_max_frames(config.preprocess.target_fps, config.preprocess.max_seconds)
     batches = _batch_indices(len(clips), batch_size)
@@ -369,6 +414,9 @@ def run_eval(config: EvalConfig, inferencer: QwenVideoInferencer | None = None) 
             logger.info("Stopping after {} batches due to limit_batches.", config.eval.limit_batches)
             break
         batch_clips, batch_video_paths = _prepare_batch(clips, indices, config.eval.dataset_root)
+        if not batch_clips:
+            logger.warning("Skipping batch {} because no videos were available.", batch_idx)
+            continue
         outputs = inferencer.infer_batch(
             batch_video_paths,
             prompt,
@@ -388,14 +436,15 @@ def run_eval(config: EvalConfig, inferencer: QwenVideoInferencer | None = None) 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run DADA-2000 evaluation with batching.")
-    parser.add_argument("--config", type=Path, required=True, help="Path to eval YAML config.")
+    parser.add_argument("--config", type=Path, required=True, default=REPO_ROOT / "task_2_evaluation_suite/eval_config.yaml", help="Path to eval YAML config.")
+    parser.add_argument("--overwrite", action="store_true", help="Overwrite existing results.")
     return parser
 
 
 def main() -> None:
     args = _build_arg_parser().parse_args()
     config = load_eval_config(args.config)
-    results = run_eval(config)
+    results = run_eval(config, overwrite=args.overwrite)
     _dump_results(config.eval.output_path, results)
     logger.info("Wrote results to {}", config.eval.output_path)
 

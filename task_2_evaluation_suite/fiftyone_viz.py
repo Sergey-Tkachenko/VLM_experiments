@@ -194,7 +194,8 @@ def build_fiftyone_dataset(
         if overwrite:
             fo.delete_dataset(dataset_name)
         else:
-            raise ValueError(f"Dataset '{dataset_name}' already exists. Use --overwrite to replace it.")
+            logger.info("Dataset '{}' already exists; loading without rebuilding.", dataset_name)
+            return fo.load_dataset(dataset_name)
     dataset = fo.Dataset(dataset_name)
     dataset.persistent = True
 
