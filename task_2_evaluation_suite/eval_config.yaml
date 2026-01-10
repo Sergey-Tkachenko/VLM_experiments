@@ -19,13 +19,13 @@ hardware:
 
 eval:
   split: val
-  # split_path: task_2_evaluation_suite/val.json
-  split_path: artifacts/debug.json
+  split_path: task_2_evaluation_suite/val.json
+  # split_path: artifacts/debug.json
   dataset_root: /workspace/datasets/mm-au/Origin/DADA2000/DADA2000
   xlsx_path: /workspace/datasets/mm-au/dada_text_annotations.xlsx
   output_path: artifacts/evals/dada_eval_val.json
   max_retries: 3
-  limit_batches: 10
+  limit_batches: null
   dump_every_batches: 10
 
 visualization_params:

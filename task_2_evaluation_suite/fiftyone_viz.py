@@ -179,6 +179,47 @@ def _attach_prediction_fields(
         sample["abs_time_error_sec"] = abs(time_error)
 
 
+def sget(sample: fo.Sample, field: str, default=None):
+    # field may not exist in some datasets/versions
+    if sample.has_field(field):
+        v = sample.get_field(field)
+        return default if v is None else v
+    return default
+
+
+def _attach_eval_fields(sample: fo.Sample, source_fps: float) -> None:
+    # ---- classification labels ----
+    pred_name = sget(sample, "pred_accident_type_name")
+    gt_name   = sget(sample, "gt_accident_type_name")
+
+    if pred_name is None:
+        pid = sget(sample, "pred_accident_type")
+        pred_name = str(pid) if pid is not None else None
+
+    if gt_name is None:
+        gid = sget(sample, "gt_accident_type")
+        gt_name = str(gid) if gid is not None else None
+
+    if pred_name is not None:
+        sample["pred_type_cls"] = fo.Classification(label=pred_name)
+    if gt_name is not None:
+        sample["gt_type_cls"] = fo.Classification(label=gt_name)
+
+    # ---- regression values (seconds) ----
+    pred_t = sget(sample, "pred_accident_frame_sec")
+    gt_t   = sget(sample, "gt_accident_frame_sec")
+
+    if pred_t is not None:
+        sample["pred_time_reg"] = fo.Regression(value=float(pred_t))
+    if gt_t is not None:
+        sample["gt_time_reg"] = fo.Regression(value=float(gt_t))
+
+    # ---- convenience scalar: abs error in frames ----
+    abs_err_sec = sget(sample, "abs_time_error_sec")
+    if abs_err_sec is not None:
+        sample["abs_time_error_frames"] = float(abs_err_sec) * float(source_fps)
+
+
 def build_fiftyone_dataset(
     eval_results: dict[str, dict[str, Any]],
     dataset_root: Path,
@@ -240,6 +281,7 @@ def build_fiftyone_dataset(
             source_fps,
             point_half_window_sec,
         )
+        _attach_eval_fields(sample, source_fps)
         abnormal_window = _build_abnormal_window(sample, metadata, source_fps)
         if abnormal_window is not None:
             sample["abnormal_window"] = abnormal_window
