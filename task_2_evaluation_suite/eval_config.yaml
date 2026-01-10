@@ -8,7 +8,8 @@ preprocess:
   target_fps: 2.0
   source_fps: 30.0
   max_seconds: 16.0
-  max_pixels: 1072512 # 1596 * 672, origin resolution
+  # max_pixels: 1072512 # 1596 * 672, origin resolution
+  max_pixels:  268128 # 1596 / 2 * 672 / 2, cut half of the resolution
   min_pixels: null
 
 hardware:
@@ -24,5 +25,9 @@ eval:
   xlsx_path: /workspace/datasets/mm-au/dada_text_annotations.xlsx
   output_path: artifacts/evals/dada_eval_val.json
   max_retries: 3
-  limit_batches: 10
+  limit_batches: null
   dump_every_batches: 10
+
+visualization_params:
+  point_half_window_sec: 0.5
+  app_port: 5151
