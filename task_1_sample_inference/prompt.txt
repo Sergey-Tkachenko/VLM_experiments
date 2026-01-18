@@ -1,6 +1,10 @@
-Analyze the dashcam video.
-Return ONLY valid JSON that matches this JSON Schema:
-{{ json_schema }}
-Field descriptions:
-{{ field_descriptions }}
-No markdown, no extra keys, no trailing text.
+You will get a video. 
+
+Please describe the scene that you see in three sentences.
+
+Output format:
+```json
+{
+    "description": "A description of the scene in three sentences."
+}
+```

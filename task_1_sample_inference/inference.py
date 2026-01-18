@@ -17,17 +17,11 @@ from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
 class DashcamSchema(BaseModel):
     """Schema for dashcam analysis outputs."""
 
-    unique_pedestrian_count: int = Field(
+    description: str = Field(
         ...,
-        description="Count of unique pedestrians visible in the clip. Use 0 if none are present.",
-        ge=0,
-    )
-    adjacent_car_description: str = Field(
-        ...,
-        description="Short description of the car adjacent to the ego vehicle (color, type, position).",
+        description="A description of the scene in three sentences.",
         min_length=1,
     )
-
 
 @dataclass(frozen=True)
 class VideoSample:

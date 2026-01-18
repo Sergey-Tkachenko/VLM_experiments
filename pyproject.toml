@@ -29,6 +29,7 @@ dependencies = [
     "qwen-vl-utils[decord]>=0.0.8",
     "ipywidgets>=8.1.8",
     "anywidget>=0.9.21",
+    "yt-dlp>=2025.12.8",
 ]
 
 [dependency-groups]
