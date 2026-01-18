@@ -333,7 +333,7 @@ def resolve_viz_inputs(
 def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Visualize DADA-2000 eval results in FiftyOne.")
     parser.add_argument("--eval-json", type=Path, required=True, help="Path to eval JSON results.")
-    parser.add_argument("--config", type=Path, required=True, help="Eval config YAML for defaults.")
+    parser.add_argument("--config", type=Path, default=REPO_ROOT / "task_2_evaluation_suite/eval_config.yaml", help="Eval config YAML for defaults.")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing dataset.")
     parser.add_argument("--local", action="store_true", help="Launch the App locally instead of remote.")
     return parser

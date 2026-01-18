@@ -35,6 +35,9 @@ POPULAR_CLASS_IDS = [11, 43, 50, 10, 5, 6, 37, 48, 38, 8, 1, 57, 12, 49, 56, 14,
 class DadaAccidentSchema(BaseModel):
     """Schema for DADA accident predictions."""
 
+    reasoning: str = Field(
+        "Explain you choices for accident type -- what have you seen on video that supports this choice"
+    )
     accident_type: int = Field(
         ...,
         description="Accident type ID. Use 0 if no accident occurs.",
@@ -363,7 +366,7 @@ def _merge_results(
 
 def _dump_results(output_path: Path, results: dict[str, dict[str, Any]]) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(results, ensure_ascii=False), encoding="utf-8")
+    output_path.write_text(json.dumps(results, ensure_ascii=False, indent=4), encoding="utf-8")
 
 
 def run_eval(
