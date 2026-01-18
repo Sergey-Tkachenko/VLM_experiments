@@ -436,7 +436,7 @@ def run_eval(
 
 def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run DADA-2000 evaluation with batching.")
-    parser.add_argument("--config", type=Path, required=True, default=REPO_ROOT / "task_2_evaluation_suite/eval_config.yaml", help="Path to eval YAML config.")
+    parser.add_argument("--config", type=Path, default=REPO_ROOT / "task_2_evaluation_suite/eval_config.yaml", help="Path to eval YAML config.")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing results.")
     return parser
 
