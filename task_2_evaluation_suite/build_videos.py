@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build MP4 clips alongside DADA image sequences using FFmpeg."""
+"""Build DADA-2000 videos from chunked archives and copy outputs."""
 from __future__ import annotations
 
 import argparse
@@ -18,11 +18,15 @@ from loguru import logger
 from tqdm import tqdm
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_PARTS_DIR = Path("/root/mm-au/DADA-2000_chunks")
+DEFAULT_TEMP_ROOT = Path("/root/mm-au/DADA2000")
 DEFAULT_DATASET_ROOT = Path("/workspace/datasets/mm-au/Origin/DADA2000/DADA2000")
+DEFAULT_ANNOTATIONS_SRC = Path("/root/mm-au/dada_text_annotations.xlsx")
+DEFAULT_ANNOTATIONS_DST = Path("/workspace/datasets/mm-au/dada_text_annotations.xlsx")
 DEFAULT_FPS = 30
 DEFAULT_CRF = 23
 DEFAULT_PRESET = "medium"
-MANIFEST_PREFIX = "build_videos_manifest"
+MANIFEST_PREFIX = "build_dataset_manifest"
 
 
 @dataclass(frozen=True)
@@ -73,12 +77,48 @@ class ClipResult:
 
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments."""
-    parser = argparse.ArgumentParser(description="Build MP4 clips for DADA-2000 image sequences.")
+    parser = argparse.ArgumentParser(description="Build DADA-2000 videos from chunked archives.")
+    parser.add_argument(
+        "--parts-dir",
+        type=Path,
+        default=DEFAULT_PARTS_DIR,
+        help="Directory containing DADA2000.part_* chunks.",
+    )
+    parser.add_argument(
+        "--parts-limit",
+        type=int,
+        default=None,
+        help="Use only the first N chunk parts (for quick E2E checks).",
+    )
+    parser.add_argument(
+        "--temp-root",
+        type=Path,
+        default=DEFAULT_TEMP_ROOT,
+        help="Temporary root for unpacked frames on local disk.",
+    )
     parser.add_argument(
         "--dataset-root",
         type=Path,
         default=DEFAULT_DATASET_ROOT,
         help="Path to DADA2000 dataset root.",
+    )
+    parser.add_argument(
+        "--annotations-src",
+        type=Path,
+        default=DEFAULT_ANNOTATIONS_SRC,
+        help="Source XLSX annotations file.",
+    )
+    parser.add_argument(
+        "--annotations-dst",
+        type=Path,
+        default=DEFAULT_ANNOTATIONS_DST,
+        help="Destination for XLSX annotations file.",
+    )
+    parser.add_argument(
+        "--unpack",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Whether to unpack chunked archive into temp storage.",
     )
     parser.add_argument("--limit", type=int, default=None, help="Process only the first N clips.")
     parser.add_argument("--workers", type=int, default=os.cpu_count() or 1, help="Number of parallel workers.")
@@ -136,6 +176,100 @@ def discover_clip_jobs(dataset_root: Path) -> list[ClipJob]:
             )
         )
     return jobs
+
+
+def list_chunk_parts(parts_dir: Path, parts_limit: int | None) -> list[Path]:
+    """List chunk part files in sorted order."""
+    parts = sorted(parts_dir.glob("DADA2000.part_*"))
+    if parts_limit is not None:
+        parts = parts[:parts_limit]
+    if not parts:
+        raise FileNotFoundError(f"No chunk parts found in {parts_dir}.")
+    return parts
+
+
+def unpack_images_from_parts(parts_dir: Path, temp_root: Path, parts_limit: int | None) -> None:
+    """Unpack image frames from concatenated chunk parts into temp storage."""
+    temp_root.mkdir(parents=True, exist_ok=True)
+    parts = list_chunk_parts(parts_dir, parts_limit)
+    cat_proc = subprocess.Popen(
+        ["cat", *[str(part) for part in parts]],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    tar_proc = subprocess.Popen(
+        [
+            "tar",
+            "-xzvf",
+            "-",
+            "--wildcards",
+            "--wildcards-match-slash",
+            "-C",
+            str(temp_root),
+            "*/images/*",
+        ],
+        stdin=cat_proc.stdout,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if cat_proc.stdout is not None:
+        cat_proc.stdout.close()
+    _, tar_stderr = tar_proc.communicate()
+    cat_stderr = ""
+    if cat_proc.stderr is not None:
+        cat_stderr = cat_proc.stderr.read().decode("utf-8", errors="replace")
+    cat_code = cat_proc.wait()
+    if cat_code != 0:
+        raise RuntimeError(f"Failed to read chunk parts: {cat_stderr.strip()}")
+    if tar_proc.returncode != 0:
+        if parts_limit is not None:
+            logger.warning(
+                "Tar exited with code {} while using parts_limit. stderr: {}",
+                tar_proc.returncode,
+                tar_stderr.strip(),
+            )
+        else:
+            raise RuntimeError(f"Tar extraction failed: {tar_stderr.strip()}")
+
+
+def locate_dataset_root(temp_root: Path) -> Path:
+    """Locate the dataset root that contains type/video/images directories."""
+    images_dirs = sorted(temp_root.rglob("images"))
+    if not images_dirs:
+        raise FileNotFoundError(f"No images directories found under {temp_root}.")
+    candidates = []
+    for images_dir in images_dirs:
+        if images_dir.is_dir() and len(images_dir.parents) >= 3:
+            candidates.append(images_dir.parents[2])
+    if not candidates:
+        raise FileNotFoundError(f"No clip roots found under {temp_root}.")
+    root = candidates[0]
+    for candidate in candidates[1:]:
+        if candidate != root:
+            raise RuntimeError(f"Multiple dataset roots detected: {root} and {candidate}.")
+    return root
+
+
+def copy_annotations(annotations_src: Path, annotations_dst: Path) -> None:
+    """Copy annotations spreadsheet to destination."""
+    if not annotations_src.exists():
+        raise FileNotFoundError(f"Annotations source not found: {annotations_src}")
+    annotations_dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(annotations_src, annotations_dst)
+
+
+def copy_videos_to_dataset_root(jobs: list[ClipJob], dataset_root: Path) -> int:
+    """Copy encoded videos to the dataset root, preserving structure."""
+    copied = 0
+    for job in jobs:
+        if not job.output_path.exists():
+            continue
+        target_dir = dataset_root / job.type_id / job.video_id
+        target_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(job.output_path, target_dir / "video.mp4")
+        copied += 1
+    return copied
 
 
 def collect_frame_info(frames_dir: Path) -> FrameInfo:
@@ -382,6 +516,14 @@ def _validate_positive(value: int | None, name: str) -> None:
         raise ValueError(f"{name} must be positive.")
 
 
+def _validate_non_negative(value: int | None, name: str) -> None:
+    """Validate a non-negative integer argument."""
+    if value is None:
+        return
+    if value < 0:
+        raise ValueError(f"{name} must be non-negative.")
+
+
 def _summarize_results(results: list[ClipResult]) -> dict[str, int]:
     """Count encoded, skipped, and failed results.
 
@@ -404,16 +546,25 @@ def main() -> None:
     _validate_positive(args.workers, "workers")
     _validate_positive(args.fps, "fps")
     _validate_positive(args.crf, "crf")
+    _validate_non_negative(args.parts_limit, "parts_limit")
     if shutil.which("ffmpeg") is None:
         raise RuntimeError("ffmpeg is required to build MP4 clips.")
-    if not args.dataset_root.exists():
-        raise FileNotFoundError(f"Dataset root not found: {args.dataset_root}")
+    if args.unpack and not args.parts_dir.exists():
+        raise FileNotFoundError(f"Parts directory not found: {args.parts_dir}")
 
-    jobs = discover_clip_jobs(args.dataset_root)
+    if args.unpack:
+        logger.info("Unpacking chunk parts from {}", args.parts_dir)
+        unpack_images_from_parts(args.parts_dir, args.temp_root, args.parts_limit)
+
+    dataset_root = locate_dataset_root(args.temp_root)
+    logger.info("Located dataset root at {}", dataset_root)
+    copy_annotations(args.annotations_src, args.annotations_dst)
+
+    jobs = discover_clip_jobs(dataset_root)
     if args.limit is not None:
         jobs = jobs[: args.limit]
     if not jobs:
-        logger.warning("No clips found under {}", args.dataset_root)
+        logger.warning("No clips found under {}", dataset_root)
         return
 
     settings = EncodeSettings(
@@ -429,7 +580,14 @@ def main() -> None:
     logger.info("Writing manifest to {}", manifest_path)
     results = run_jobs(jobs, settings, manifest_path)
     summary = _summarize_results(results)
-    logger.info("Done. Encoded: {}, skipped: {}, failed: {}", summary["encoded"], summary["skipped"], summary["failed"])
+    copied = copy_videos_to_dataset_root(jobs, args.dataset_root)
+    logger.info(
+        "Done. Encoded: {}, skipped: {}, failed: {}, copied: {}",
+        summary["encoded"],
+        summary["skipped"],
+        summary["failed"],
+        copied,
+    )
 
 
 if __name__ == "__main__":

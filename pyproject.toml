@@ -30,6 +30,7 @@ dependencies = [
     "ipywidgets>=8.1.8",
     "anywidget>=0.9.21",
     "yt-dlp>=2025.12.8",
+    "hf-xet>=1.2.0",
 ]
 
 [dependency-groups]
