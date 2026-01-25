@@ -56,11 +56,13 @@ class PreprocessConfig(BaseModel):
 
     target_fps: float
     source_fps: float
-    max_seconds: float
+    pre_buffer_sec: float
+    post_buffer_sec: float
     max_pixels: int | None
     min_pixels: int | None
+    version: str | None = None
 
-    @field_validator("target_fps", "source_fps", "max_seconds")
+    @field_validator("target_fps", "source_fps", "pre_buffer_sec", "post_buffer_sec")
     @classmethod
     def _validate_positive_float(cls, value: float) -> float:
         if value <= 0:

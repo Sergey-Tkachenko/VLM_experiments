@@ -20,9 +20,10 @@ load_dotenv(REPO_ROOT / ".env")
 
 sys.path.insert(0, str(REPO_ROOT))
 
-from task_2_evaluation_suite.config_loader import EvalConfig, load_eval_config
+from task_2_evaluation_suite.config_loader import EvalConfig, PreprocessConfig, load_eval_config
 from task_1_sample_inference.inference import InferenceOutcome, QwenVideoInferencer
 from task_1_sample_inference.prompting import load_prompt_template, render_prompt
+from task_2_evaluation_suite.video_preprocess import compute_preprocess_signature, preprocess_video_if_needed
 
 
 
@@ -172,11 +173,11 @@ def load_accident_frames(xlsx_path: Path) -> dict[tuple[str, str], int | None]:
     return mapping
 
 
-def compute_max_frames(target_fps: float, max_seconds: float) -> int:
-    """Compute maximum frames for a clip length budget."""
-    if max_seconds <= 0:
-        raise ValueError("max_seconds must be positive.")
-    max_frames = int(round(target_fps * max_seconds))
+def compute_max_frames_for_window(target_fps: float, pre_buffer_sec: float, post_buffer_sec: float) -> int:
+    """Compute maximum frames for a pre/post-accident window."""
+    if pre_buffer_sec <= 0 or post_buffer_sec <= 0:
+        raise ValueError("pre_buffer_sec and post_buffer_sec must be positive.")
+    max_frames = int(round(target_fps * (pre_buffer_sec + post_buffer_sec)))
     if max_frames <= 0:
         raise ValueError("max_frames must be positive.")
     return max_frames
@@ -299,18 +300,35 @@ def _prepare_batch(
     clips: list[ClipMeta],
     indices: list[int],
     dataset_root: Path,
+    preprocess_config: PreprocessConfig,
+    preprocess_signature: str,
 ) -> tuple[list[ClipMeta], list[str]]:
     batch_clips = [clips[idx] for idx in indices]
     batch_video_paths = []
     existing_clips: list[ClipMeta] = []
     for clip in batch_clips:
+        if clip.accident_frame is None:
+            logger.warning("Skipping clip {} because accident frame is missing.", _to_clip_key(clip))
+            continue
         clip_dir = dataset_root / clip.type_id / clip.video_id
-        video_path = clip_dir / "video.mp4"
-        if not video_path.exists():
-            logger.warning("Video not found; skipping clip {}: {}", _to_clip_key(clip), video_path)
+        preprocessed_path = clip_dir / "preprocessed.mp4"
+        original_path = clip_dir / "video.mp4"
+        try:
+            resolved_path = preprocess_video_if_needed(
+                original_path=original_path,
+                preprocessed_path=preprocessed_path,
+                target_fps=preprocess_config.target_fps,
+                source_fps=preprocess_config.source_fps,
+                pre_buffer_sec=preprocess_config.pre_buffer_sec,
+                post_buffer_sec=preprocess_config.post_buffer_sec,
+                accident_frame=clip.accident_frame,
+                preprocess_signature=preprocess_signature,
+            )
+        except Exception as exc:
+            logger.warning("Failed to preprocess clip {}: {}", _to_clip_key(clip), exc)
             continue
         existing_clips.append(clip)
-        batch_video_paths.append(str(video_path))
+        batch_video_paths.append(str(resolved_path))
     return existing_clips, batch_video_paths
 
 
@@ -328,8 +346,12 @@ def _load_existing_results(output_path: Path) -> dict[str, dict[str, Any]]:
     return raw
 
 
-def _collect_completed_keys(results: dict[str, dict[str, Any]]) -> set[str]:
-    return {clip_key for clip_key, record in results.items() if record.get("json_valid") is True}
+def _collect_completed_keys(results: dict[str, dict[str, Any]], preprocess_signature: str) -> set[str]:
+    return {
+        clip_key
+        for clip_key, record in results.items()
+        if record.get("json_valid") is True and record.get("preprocess_signature") == preprocess_signature
+    }
 
 
 def _filter_clips_by_keys(clips: list[ClipMeta], excluded_keys: set[str]) -> tuple[list[ClipMeta], int]:
@@ -350,6 +372,7 @@ def _merge_results(
     batch_clips: list[ClipMeta],
     outputs: list[InferenceOutcome],
     source_fps: float,
+    preprocess_signature: str,
 ) -> None:
     for clip, outcome in zip(batch_clips, outputs):
         clip_key = _to_clip_key(clip)
@@ -361,6 +384,7 @@ def _merge_results(
             "attempts": outcome.attempts,
             "raw_text": outcome.raw_text,
             "ground_truth": _build_ground_truth(clip, source_fps),
+            "preprocess_signature": preprocess_signature,
         }
 
 
@@ -389,7 +413,8 @@ def run_eval(
     clips = _attach_accident_frames(clips, accident_map)
 
     existing_results = {} if overwrite else _load_existing_results(config.eval.output_path)
-    completed_keys = _collect_completed_keys(existing_results)
+    preprocess_signature = compute_preprocess_signature(config.preprocess)
+    completed_keys = _collect_completed_keys(existing_results, preprocess_signature)
     clips, skipped = _filter_clips_by_keys(clips, completed_keys)
     if skipped > 0:
         logger.info("Found {} already evaluated clips; proceeding with {} remaining.", skipped, len(clips))
@@ -410,13 +435,23 @@ def run_eval(
 
     results: dict[str, dict[str, Any]] = dict(existing_results)
     prompt = _build_eval_prompt(DadaAccidentSchema, PROMPT_PATH, CLASS_MAPPING_PATH)
-    max_frames = compute_max_frames(config.preprocess.target_fps, config.preprocess.max_seconds)
+    max_frames = compute_max_frames_for_window(
+        config.preprocess.target_fps,
+        config.preprocess.pre_buffer_sec,
+        config.preprocess.post_buffer_sec,
+    )
     batches = _batch_indices(len(clips), batch_size)
     for batch_idx, indices in enumerate(tqdm(batches, desc="Batches"), start=1):
         if config.eval.limit_batches is not None and batch_idx > config.eval.limit_batches:
             logger.info("Stopping after {} batches due to limit_batches.", config.eval.limit_batches)
             break
-        batch_clips, batch_video_paths = _prepare_batch(clips, indices, config.eval.dataset_root)
+        batch_clips, batch_video_paths = _prepare_batch(
+            clips,
+            indices,
+            config.eval.dataset_root,
+            config.preprocess,
+            preprocess_signature,
+        )
         if not batch_clips:
             logger.warning("Skipping batch {} because no videos were available.", batch_idx)
             continue
@@ -431,7 +466,13 @@ def run_eval(
             max_pixels=config.preprocess.max_pixels,
             min_pixels=config.preprocess.min_pixels,
         )
-        _merge_results(results, batch_clips, outputs, config.preprocess.source_fps)
+        _merge_results(
+            results,
+            batch_clips,
+            outputs,
+            config.preprocess.source_fps,
+            preprocess_signature,
+        )
         if batch_idx % config.eval.dump_every_batches == 0:
             _dump_results(config.eval.output_path, results)
     return results

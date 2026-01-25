@@ -5,12 +5,17 @@ model:
   max_new_tokens: 256
 
 preprocess:
-  target_fps: 2.0
+  target_fps: 10.0
   source_fps: 30.0
-  max_seconds: 16.0
+  pre_buffer_sec: 1.5
+  post_buffer_sec: 0.5
   # max_pixels: 1072512 # 1596 * 672, origin resolution
   max_pixels:  268128 # 1596 / 2 * 672 / 2, cut half of the resolution
   min_pixels: null
+  version: null
+
+# check preprocessing on
+# /workspace/datasets/mm-au/Origin/DADA2000/DADA2000/1/001/preprocessed.mp4
 
 hardware:
   default_batch_size: 2
@@ -19,8 +24,8 @@ hardware:
 
 eval:
   split: val
-  split_path: task_2_evaluation_suite/val.json
-  # split_path: artifacts/debug.json
+  # split_path: task_2_evaluation_suite/val.json
+  split_path: assets/debug.json
   dataset_root: /workspace/datasets/mm-au/Origin/DADA2000/DADA2000
   xlsx_path: /workspace/datasets/mm-au/dada_text_annotations.xlsx
   output_path: artifacts/evals/dada_eval_val.json
@@ -31,3 +36,5 @@ eval:
 visualization_params:
   point_half_window_sec: 0.5
   app_port: 5151
+
+# 1/001/preprocessed.mp4

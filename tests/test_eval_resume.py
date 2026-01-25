@@ -3,9 +3,18 @@ from pathlib import Path
 
 from openpyxl import Workbook
 
-from task_1_sample_inference.inference import InferenceOutcome
+from dataclasses import dataclass
 from task_2_evaluation_suite.config_loader import EvalConfig
 from task_2_evaluation_suite.eval import ClipMeta, _load_existing_results, _prepare_batch, run_eval
+from task_2_evaluation_suite.video_preprocess import compute_preprocess_signature
+
+
+@dataclass(frozen=True)
+class DummyOutcome:
+    parsed: dict | None
+    raw_text: str
+    error: str | None
+    attempts: int
 
 
 class DummyInferencer:
@@ -23,10 +32,10 @@ class DummyInferencer:
         max_new_tokens: int = 256,
         max_pixels: int | None = None,
         min_pixels: int | None = None,
-    ) -> list[InferenceOutcome]:
+    ) -> list[DummyOutcome]:
         self.calls.append(video_paths)
         return [
-            InferenceOutcome(
+            DummyOutcome(
                 parsed={"accident_type": 0, "accident_frame_position_sec": None},
                 raw_text="{}",
                 error=None,
@@ -67,9 +76,11 @@ def _build_config(
             "preprocess": {
                 "target_fps": 2.0,
                 "source_fps": 30.0,
-                "max_seconds": 4.0,
+                "pre_buffer_sec": 2.0,
+                "post_buffer_sec": 0.5,
                 "max_pixels": None,
                 "min_pixels": None,
+                "version": None,
             },
             "hardware": {
                 "default_batch_size": 2,
@@ -91,20 +102,25 @@ def _build_config(
 
 def test_prepare_batch_skips_missing_videos(tmp_path: Path) -> None:
     dataset_root = tmp_path / "dataset"
-    existing_path = dataset_root / "1" / "001" / "video.mp4"
-    existing_path.parent.mkdir(parents=True, exist_ok=True)
-    existing_path.write_bytes(b"")
+    existing_dir = dataset_root / "1" / "001"
+    existing_dir.mkdir(parents=True, exist_ok=True)
+    preprocessed_path = existing_dir / "preprocessed.mp4"
+    preprocessed_path.write_bytes(b"")
+    signature_path = preprocessed_path.with_suffix(".preprocess.json")
 
     clips = [
-        ClipMeta(type_id="1", video_id="001", clip_id="clip-1", accident_frame=None),
+        ClipMeta(type_id="1", video_id="001", clip_id="clip-1", accident_frame=30),
         ClipMeta(type_id="2", video_id="002", clip_id="clip-2", accident_frame=None),
     ]
 
-    batch_clips, batch_paths = _prepare_batch(clips, [0, 1], dataset_root)
+    config = _build_config(tmp_path / "split.json", dataset_root, tmp_path / "annotations.xlsx", tmp_path / "out.json")
+    signature = compute_preprocess_signature(config.preprocess)
+    signature_path.write_text(json.dumps({"preprocess_signature": signature}), encoding="utf-8")
+    batch_clips, batch_paths = _prepare_batch(clips, [0, 1], dataset_root, config.preprocess, signature)
 
     assert len(batch_clips) == 1
     assert batch_clips[0].clip_id == "clip-1"
-    assert batch_paths == [str(existing_path)]
+    assert batch_paths == [str(preprocessed_path)]
 
 
 def test_load_existing_results_ignores_invalid_json(tmp_path: Path) -> None:
@@ -127,6 +143,9 @@ def test_run_eval_resumes_and_skips_completed(tmp_path: Path) -> None:
         video_path = dataset_root / type_id / video_id / "video.mp4"
         video_path.parent.mkdir(parents=True, exist_ok=True)
         video_path.write_bytes(b"")
+    preprocessed_path = dataset_root / "2" / "002" / "preprocessed.mp4"
+    preprocessed_path.write_bytes(b"")
+    preprocessed_sig_path = preprocessed_path.with_suffix(".preprocess.json")
 
     existing_results = {
         "1/001": {
@@ -137,6 +156,7 @@ def test_run_eval_resumes_and_skips_completed(tmp_path: Path) -> None:
             "attempts": 1,
             "raw_text": "{}",
             "ground_truth": {},
+            "preprocess_signature": "",
         },
         "2/002": {
             "clip_id": "clip-2",
@@ -146,11 +166,15 @@ def test_run_eval_resumes_and_skips_completed(tmp_path: Path) -> None:
             "attempts": 1,
             "raw_text": "",
             "ground_truth": {},
+            "preprocess_signature": "",
         },
     }
-    output_path.write_text(json.dumps(existing_results), encoding="utf-8")
-
     config = _build_config(split_path, dataset_root, xlsx_path, output_path)
+    signature = compute_preprocess_signature(config.preprocess)
+    existing_results["1/001"]["preprocess_signature"] = signature
+    existing_results["2/002"]["preprocess_signature"] = signature
+    preprocessed_sig_path.write_text(json.dumps({"preprocess_signature": signature}), encoding="utf-8")
+    output_path.write_text(json.dumps(existing_results), encoding="utf-8")
     inferencer = DummyInferencer()
     results = run_eval(config, inferencer=inferencer, overwrite=False)
 

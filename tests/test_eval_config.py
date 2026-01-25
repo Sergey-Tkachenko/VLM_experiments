@@ -34,9 +34,11 @@ def test_load_eval_config_defaults_visualization_params(tmp_path: Path) -> None:
                 "preprocess": {
                     "target_fps": 2.0,
                     "source_fps": 30.0,
-                    "max_seconds": 4.0,
+                    "pre_buffer_sec": 2.0,
+                    "post_buffer_sec": 0.5,
                     "max_pixels": None,
                     "min_pixels": None,
+                    "version": None,
                 },
                 "hardware": {
                     "default_batch_size": 1,

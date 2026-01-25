@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from personal_scripts.build_videos import collect_frame_info, discover_clip_jobs
+from scripts.build_videos import collect_frame_info, discover_clip_jobs
 
 
 def _touch(path: Path) -> None:
