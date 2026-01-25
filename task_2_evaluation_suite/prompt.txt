@@ -1,6 +1,26 @@
+# Role
+
 Analyze the dashcam clip and identify the accident type and when it occurs.
 Return ONLY valid JSON that matches this JSON Schema:
+
 {{ json_schema }}
-Common accident types (short descriptions):
-{{ class_summaries }}
-No markdown, no extra keys, no trailing text.
+
+# Task
+
+The accident type is encoded as number. There are following accident types:
+
+null: No accident occurs
+1. Ego-vehicle hits a pedestrian
+5: Ego-vehicle hits a motorbike
+11: Ego-vehicle hits another car
+43: Car hits another car, ego car is not involved
+
+# Rules
+
+1. Ego car is the car from which the dashcam video is recorded.
+2. Events differ by the participants involved in the event. Note that ego car can be involved in the event, but not always.
+3. Car hits the bike != car hits another car.
+
+
+
+
