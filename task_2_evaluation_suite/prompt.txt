@@ -10,10 +10,7 @@ Return ONLY valid JSON that matches this JSON Schema:
 The accident type is encoded as number. There are following accident types:
 
 null: No accident occurs
-1. Ego-vehicle hits a pedestrian
-5: Ego-vehicle hits a motorbike
-11: Ego-vehicle hits another car
-43: Car hits another car, ego car is not involved
+{{ class_summaries }}
 
 # Rules
 

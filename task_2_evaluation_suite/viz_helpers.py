@@ -18,7 +18,7 @@ def parse_clip_key(clip_key: str) -> tuple[str, str]:
 def build_video_path(dataset_root: Path, clip_key: str) -> Path:
     """Build the expected DADA video path for a clip."""
     type_id, video_id = parse_clip_key(clip_key)
-    return dataset_root / type_id / video_id / "video.mp4"
+    return dataset_root / type_id / video_id / "preprocessed.mp4"
 
 
 def derive_dataset_name(eval_json_path: Path) -> str:
